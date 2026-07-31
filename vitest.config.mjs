@@ -1,11 +1,13 @@
 import { defineConfig } from "vitest/config";
 import path from "path";
+import * as dotenv from "dotenv";
+
+dotenv.config({ path: ".env" });
 
 export default defineConfig({
   test: {
-    globals: true,
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    globals: true,
   },
   resolve: {
     alias: {

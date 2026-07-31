@@ -1,1 +1,1 @@
-export const AUDIT_MODULE = "audit";
+export * from "./audit.service";

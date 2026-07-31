@@ -8,12 +8,13 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - DATABASE_URL=postgresql://ucs_user:ucs_password@postgres:5432/ucs_cm_db?schema=public
-      - SESSION_SECRET=production-secret-key-must-be-configured
-      - STORAGE_DRIVER=local
-      - LOCAL_STORAGE_PATH=/var/ucs-cm/storage
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://ucs_user:ucs_password@postgres:5432/ucs_cm_db?schema=public
+      SESSION_SECRET: production-secret-key-must-be-configured
+      SESSION_INACTIVITY_TIMEOUT_MINUTES: 30
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_PATH: /var/ucs-cm/storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -28,7 +29,6 @@ services:
       POSTGRES_USER: ucs_user
       POSTGRES_PASSWORD: ucs_password
       POSTGRES_DB: ucs_cm_db
-    # PostgreSQL port is NOT exposed publicly to host machine
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ucs_user -d ucs_cm_db"]
       interval: 5s

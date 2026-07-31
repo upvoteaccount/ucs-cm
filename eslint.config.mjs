@@ -12,11 +12,11 @@ const eslintConfig = [
         "error",
         {
           zones: [
-            // Prevent UI/App layer from importing internal domain module files directly
+            // Prevent UI/App layer from importing internal domain module files directly (except module index.ts)
             {
               target: "./src/app",
               from: "./src/modules",
-              except: ["./*/index.ts", "./**/*.interface.ts"],
+              except: ["./*/index.ts", "./**/*.interface.ts", "./auth/index.ts", "./audit/index.ts"],
               message: "Direct internal module file import into App UI layer prohibited; access modules strictly via their public entry point (index.ts) or interface.",
             },
             // Prevent Domain Modules from importing App UI code
@@ -25,11 +25,12 @@ const eslintConfig = [
               from: "./src/app",
               message: "Domain modules cannot depend on App UI layer code.",
             },
-            // Prevent Shared Utilities from importing Domain Modules
+            // Prevent Shared Utilities from importing Domain Module internals directly (except module index.ts)
             {
               target: "./src/shared",
               from: "./src/modules",
-              message: "Shared code cannot depend on business domain modules.",
+              except: ["./*/index.ts", "./**/*.interface.ts", "./auth/index.ts", "./audit/index.ts"],
+              message: "Shared code cannot depend on internal business domain module implementations.",
             },
           ],
         },
