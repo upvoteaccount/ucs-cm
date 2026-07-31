@@ -1,0 +1,44 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ucs-cm-app
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://ucs_user:ucs_password@postgres:5432/ucs_cm_db?schema=public
+      - SESSION_SECRET=production-secret-key-must-be-configured
+      - STORAGE_DRIVER=local
+      - LOCAL_STORAGE_PATH=/var/ucs-cm/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ucs_document_storage:/var/ucs-cm/storage
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: ucs-cm-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ucs_user
+      POSTGRES_PASSWORD: ucs_password
+      POSTGRES_DB: ucs_cm_db
+    # PostgreSQL port is NOT exposed publicly to host machine
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ucs_user -d ucs_cm_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ucs_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  ucs_postgres_data:
+    name: ucs_postgres_data
+  ucs_document_storage:
+    name: ucs_document_storage

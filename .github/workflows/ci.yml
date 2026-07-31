@@ -1,0 +1,64 @@
+name: CI Workflow
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verify:
+    name: Lint, Type-Check, Test & Build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ucs_user
+          POSTGRES_PASSWORD: ucs_password
+          POSTGRES_DB: ucs_cm_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type Check
+        run: npm run type-check
+
+      - name: Run Unit Tests
+        run: npm run test
+
+      - name: Verify Database Migrations
+        env:
+          DATABASE_URL: postgresql://ucs_user:ucs_password@localhost:5432/ucs_cm_db
+        run: |
+          npm run db:generate
+          npm run db:migrate
+
+      - name: Container Build Test
+        run: docker build -t ucs-cm:ci .
+
+      - name: Smoke Test Application Ingress
+        env:
+          DATABASE_URL: postgresql://ucs_user:ucs_password@localhost:5432/ucs_cm_db
+        run: |
+          npm run build

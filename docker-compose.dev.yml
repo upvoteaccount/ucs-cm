@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ucs-cm-postgres-dev
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: ucs_user
+      POSTGRES_PASSWORD: ucs_password
+      POSTGRES_DB: ucs_cm_db
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ucs_user -d ucs_cm_db
+      timeout: 3s
+      interval: 3s
+      retries: 5
+    volumes:
+      - ucs_postgres_dev_data:/var/lib/postgresql/data
+
+volumes:
+  ucs_postgres_dev_data:

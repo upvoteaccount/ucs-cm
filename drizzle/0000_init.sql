@@ -1,0 +1,1 @@
+-- Initial clean Drizzle migration placeholder
