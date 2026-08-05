@@ -3,8 +3,8 @@
 | Increment | Title | Status | Target Scope | Approved Commit |
 | :--- | :--- | :--- | :--- | :--- |
 | **INC-01** | Project Foundation | **Approved and Committed** | Next.js App Router, Docker, Drizzle, PostgreSQL baseline | `e164040e76b50baa8ca3ba339f478f203b9cba9a` |
-| **INC-02** | Authentication, Organisations and Audit Foundation | **Approved and Committed** | Identity, org isolation, RBAC, canonical GET/POST/DELETE session management & remediation, append-only audit | `150a0c672bc26cad12e825d5e90c481df6371024` |
-| **INC-03** | Solution, Case Type, Properties and Form Configuration | **In Progress** | Metadata schemas, 10 property types, form configuration, Design Studio UI | *In Progress* |
+| **INC-02** | Authentication, Organisations and Audit Foundation | **Approved and Committed** | Identity, org isolation, RBAC, canonical GET/POST/DELETE session management & remediation, append-only audit | Baseline: `150a0c672bc26cad12e825d5e90c481df6371024`<br>Remediation: `9eb5168115ae7fa99c5f7e2656355d7b0f012ff1` |
+| **INC-03** | Solution, Case Type, Properties and Form Configuration | **Not Started, Restart Planned** | Metadata schemas, 10 property types, form configuration, Design Studio UI (Abandoned implementation preserved on branch `backup/inc-03-abandoned-implementation` at commit `6d854824e4d5fbac3a55f69c9b1fdbceaa4b47eb`) | - |
 | **INC-04** | Roles, Queues and Workflow Configuration | **Not Started, Not Yet Authorised** | Solution role assignment, state machine FSM, transition rules, queues | - |
 | **INC-05** | Validation, Publishing and Immutable Snapshots | **Not Started, Not Yet Authorised** | Immutable versioned snapshots, release management | - |
 | **INC-06** | Runtime Case Creation and Generated Forms | **Not Started, Not Yet Authorised** | Case creation, generated forms, audit trail | - |
@@ -16,7 +16,7 @@
 | **INC-12** | Healthcare Portability and Final Hardening | **Not Started, Not Yet Authorised** | Healthcare reference solution portability validation and final hardening | - |
 
 ## Architectural & Product Control Baselines
-* **Product & Architecture Documentation**: Frozen and approved for Phase 1 implementation.
+* Product and architecture baselines are approved for Phase 1. UX and UI foundation documents may be refined through controlled change before UI implementation.
 * **Migration Rule**: Forward-only migrations strictly preserving `0000_init.sql` and `0001_puzzling_turbo.sql`.
 * **Workflow Boundary**: Temporal is deferred to a dedicated future phase. The `IWorkflowService` boundary is implemented and preserved.
 * **Grid / Repeating Table**: Stretch scope excluded from mandatory Phase 1 deliverables.
