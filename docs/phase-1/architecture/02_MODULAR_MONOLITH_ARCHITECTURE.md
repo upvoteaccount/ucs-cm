@@ -119,3 +119,45 @@ src/
 * **Risks**: Developers may accidentally import backend modules into frontend client components.
 * **Mitigations**: Enforce ESLint rules (`import/no-restricted-paths`) restricting imports from `src/modules/*` into client components.
 * **Product Approval Required**: Approved (Decision Point #4).
+
+---
+
+## 6. Frontend Route Layout & Session Enforcement Architecture
+
+### 6.1 Route Groups Structure
+UCS CM presentation layer uses Next.js App Router route groups to isolate layout boundaries without modifying public URL paths:
+- **`src/app/layout.tsx`**: Root layout owning `<html>`, `<body>`, global fonts, CSS design tokens, and root provider abstractions.
+- **`src/app/(public)`**: Public authentication route group. Layout renders full-screen public experiences without the application header, sidebar, or authenticated navigation shell.
+- **`src/app/(authenticated)`**: Authenticated application route group. Layout renders the shared `AppShell` container, header, navigation container, user menu, and organisation context.
+
+### 6.2 Session Enforcement Responsibility Model
+Session security and route protection enforce a strict multi-layer model:
+
+1. **Authenticated Server Layout (`src/app/(authenticated)/layout.tsx`)**:
+   - Reads the `ucs_session_token` HttpOnly cookie on the server.
+   - Validates the token against PostgreSQL using `authService.validateSession()`.
+   - If the token is missing, expired, revoked, or invalid, performs an immediate server-side HTTP 307 redirect to `/` before rendering any protected UI.
+
+2. **Client Session Context (`SessionProvider`)**:
+   - Exposes safe session-context DTO (`user`, `organisation`, `platformRoles`) to client components.
+   - Manages UI rendering states and client-side logout triggers.
+   - Is treated purely as UX context, NOT as the primary security boundary.
+
+3. **Backend API Routes (`src/app/api/*`)**:
+   - Every protected API route independently validates session authentication and RBAC authorization.
+   - Backend APIs never rely on or trust client-side route protection.
+
+4. **Client API Error Handling**:
+   - Intercepts HTTP 401 responses from backend API calls.
+   - Clears local client session context.
+   - Redirects client to `/` with a session-expired reason code.
+
+5. **Public Login Route (`src/app/(public)/page.tsx`)**:
+   - Checks for active session token on server load.
+   - If an authenticated session is already valid, performs a server-side redirect to the approved landing route.
+
+### 6.3 Explicit Exclusion: Edge Middleware Cookie Enforcement
+Middleware-based cookie-presence enforcement is explicitly excluded in Phase 1:
+- Cookie presence alone does not guarantee database session validity or active account status.
+- Authoritative session validation already occurs in the authenticated server layout and backend API routes.
+- Omission eliminates duplicate database connection overhead and prevents Edge runtime session desynchronization.
