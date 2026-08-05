@@ -13,20 +13,18 @@ import {
   RoleContext,
   Badge,
   UserMenu,
-  ShellUser,
-  ShellOrganisation,
+  ShellPresentationUser,
+  ShellPresentationOrganisation,
   PlatformRole,
 } from "./index";
 
-const mockUser: ShellUser = {
-  id: "usr_1",
+const mockUser: ShellPresentationUser = {
   displayName: "Jane Doe",
   email: "jane.doe@example.invalid",
 };
 
-const mockOrg: ShellOrganisation = {
-  id: "org_1",
-  name: "Acme Corporation",
+const mockOrg: ShellPresentationOrganisation = {
+  name: "Acme Financial Services",
 };
 
 const mockRoles: PlatformRole[] = ["PLATFORM_ADMIN", "SOLUTION_DESIGNER"];
@@ -76,7 +74,7 @@ describe("Stage C1 Minimum Shell Primitives Suite", () => {
       render(<Header user={mockUser} organisation={mockOrg} roles={mockRoles} />);
 
       expect(screen.getByText("UCS CM")).toBeInTheDocument();
-      expect(screen.getAllByText("Acme Corporation").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Acme Financial Services").length).toBeGreaterThan(0);
       expect(screen.getByRole("button", { name: /User menu for Jane Doe/i })).toBeInTheDocument();
       expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
     });
@@ -125,7 +123,7 @@ describe("Stage C1 Minimum Shell Primitives Suite", () => {
     it("displays active organisation name without selector affordances or internal IDs", () => {
       render(<OrganisationContext organisation={mockOrg} />);
 
-      expect(screen.getByText("Acme Corporation")).toBeInTheDocument();
+      expect(screen.getByText("Acme Financial Services")).toBeInTheDocument();
       expect(screen.queryByText("org_1")).not.toBeInTheDocument();
       expect(screen.queryByRole("button")).not.toBeInTheDocument();
       expect(screen.queryByRole("combobox")).not.toBeInTheDocument();

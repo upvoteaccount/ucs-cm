@@ -1,8 +1,8 @@
 import React from "react";
-import { ShellUser } from "./shellTypes";
+import { ShellPresentationUser } from "./shellTypes";
 
 export interface UserContextProps extends React.HTMLAttributes<HTMLDivElement> {
-  user: ShellUser;
+  user: ShellPresentationUser;
   showEmail?: boolean;
 }
 

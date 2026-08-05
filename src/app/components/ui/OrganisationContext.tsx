@@ -1,8 +1,8 @@
 import React from "react";
-import { ShellOrganisation } from "./shellTypes";
+import { ShellPresentationOrganisation } from "./shellTypes";
 
 export interface OrganisationContextProps extends React.HTMLAttributes<HTMLDivElement> {
-  organisation: ShellOrganisation;
+  organisation: ShellPresentationOrganisation;
 }
 
 export const OrganisationContext: React.FC<OrganisationContextProps> = ({

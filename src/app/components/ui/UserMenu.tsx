@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useId } from "react";
-import { ShellUser, ShellOrganisation, PlatformRole } from "./shellTypes";
+import { ShellPresentationUser, ShellPresentationOrganisation, PlatformRole } from "./shellTypes";
 import { UserContext } from "./UserContext";
 import { OrganisationContext } from "./OrganisationContext";
 import { RoleContext } from "./RoleContext";
@@ -9,8 +9,8 @@ import { Button } from "./Button";
 import { Divider } from "./Divider";
 
 export interface UserMenuProps {
-  user: ShellUser;
-  organisation?: ShellOrganisation;
+  user: ShellPresentationUser;
+  organisation?: ShellPresentationOrganisation;
   roles?: PlatformRole[];
   onSignOut?: () => void;
   isSignOutPending?: boolean;
@@ -22,15 +22,22 @@ export const UserMenu: React.FC<UserMenuProps> = ({
   organisation,
   roles = [],
   onSignOut,
-  isSignOutPending = false,
+  isSignOutPending: externalPending = false,
   signOutPendingText = "Signing out...",
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [internalPending, setInternalPending] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
 
-  const toggleMenu = () => setIsOpen((prev) => !prev);
+  const isPending = externalPending || internalPending;
+
+  const toggleMenu = () => {
+    if (isPending) return;
+    setIsOpen((prev) => !prev);
+  };
   const closeMenu = () => {
     setIsOpen(false);
     triggerRef.current?.focus();
@@ -59,9 +66,41 @@ export const UserMenu: React.FC<UserMenuProps> = ({
     document.addEventListener("mousedown", handleClickOutside);
 
     return () => {
+      document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isOpen]);
+
+  const handleSignOutClick = async () => {
+    if (isPending) return;
+
+    setLogoutError(null);
+
+    if (onSignOut) {
+      setIsOpen(false);
+      onSignOut();
+      return;
+    }
+
+    setInternalPending(true);
+
+    try {
+      const res = await fetch("/api/auth/session", {
+        method: "DELETE",
+      });
+
+      if (res.ok || res.status === 401) {
+        window.location.href = "/";
+        return;
+      }
+
+      setLogoutError("Unable to sign out. Please try again.");
+      setInternalPending(false);
+    } catch {
+      setLogoutError("Unable to reach authentication service. Please check your connection.");
+      setInternalPending(false);
+    }
+  };
 
   const firstName = user.displayName.split(" ")[0] || "Account";
 
@@ -89,7 +128,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
         aria-label={`User menu for ${user.displayName}`}
         aria-expanded={isOpen}
         aria-controls={panelId}
-        disabled={isSignOutPending}
+        disabled={isPending}
         onClick={toggleMenu}
         style={{
           display: "inline-flex",
@@ -101,8 +140,8 @@ export const UserMenu: React.FC<UserMenuProps> = ({
           border: "1px solid var(--border-default)",
           backgroundColor: "var(--bg-surface)",
           color: "var(--text-primary)",
-          cursor: isSignOutPending ? "not-allowed" : "pointer",
-          opacity: isSignOutPending ? 0.7 : 1,
+          cursor: isPending ? "not-allowed" : "pointer",
+          opacity: isPending ? 0.7 : 1,
           fontSize: "var(--font-size-sm)",
           fontWeight: "var(--font-weight-medium)",
         }}
@@ -195,21 +234,31 @@ export const UserMenu: React.FC<UserMenuProps> = ({
             </>
           )}
 
+          {logoutError && (
+            <div
+              role="alert"
+              style={{
+                fontSize: "var(--font-size-xs)",
+                color: "var(--status-error-text)",
+                backgroundColor: "var(--status-error-bg)",
+                padding: "var(--space-2)",
+                borderRadius: "var(--radius-sm)",
+                border: "1px solid var(--border-default)",
+              }}
+            >
+              {logoutError}
+            </div>
+          )}
+
           <Divider />
 
           <Button
             type="button"
             variant="secondary"
-            isPending={isSignOutPending}
+            isPending={isPending}
             pendingText={signOutPendingText}
-            disabled={isSignOutPending}
-            onClick={() => {
-              if (isSignOutPending) return;
-              setIsOpen(false);
-              if (onSignOut) {
-                onSignOut();
-              }
-            }}
+            disabled={isPending}
+            onClick={handleSignOutClick}
           >
             Sign out
           </Button>

@@ -1,10 +1,10 @@
 import React from "react";
-import { ShellUser, ShellOrganisation, PlatformRole } from "./shellTypes";
+import { ShellPresentationUser, ShellPresentationOrganisation, PlatformRole } from "./shellTypes";
 import { UserMenu } from "./UserMenu";
 
 export interface HeaderProps extends React.HTMLAttributes<HTMLElement> {
-  user?: ShellUser;
-  organisation?: ShellOrganisation;
+  user?: ShellPresentationUser;
+  organisation?: ShellPresentationOrganisation;
   roles?: PlatformRole[];
   onSignOut?: () => void;
   isSignOutPending?: boolean;
