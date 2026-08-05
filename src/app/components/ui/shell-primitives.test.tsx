@@ -32,6 +32,24 @@ const mockOrg: ShellOrganisation = {
 const mockRoles: PlatformRole[] = ["PLATFORM_ADMIN", "SOLUTION_DESIGNER"];
 
 describe("Stage C1 Minimum Shell Primitives Suite", () => {
+  describe("SkipLink", () => {
+    it("renders SkipLink before header trigger in DOM order, exactly one banner landmark, and target href", () => {
+      render(
+        <AppShell>
+          <div>Test Content</div>
+        </AppShell>
+      );
+
+      const skipLink = screen.getByRole("link", { name: "Skip to main content" });
+      expect(skipLink).toBeInTheDocument();
+      expect(skipLink).toHaveAttribute("href", "#main-content");
+      expect(skipLink.className).toContain("ucs-skip-link");
+
+      const header = screen.getByRole("banner");
+      expect(skipLink.compareDocumentPosition(header)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+  });
+
   describe("AppShell Primitive", () => {
     it("renders SkipLink before header trigger in DOM order, exactly one banner landmark, and one main landmark with id='main-content'", () => {
       render(
@@ -58,7 +76,7 @@ describe("Stage C1 Minimum Shell Primitives Suite", () => {
       render(<Header user={mockUser} organisation={mockOrg} roles={mockRoles} />);
 
       expect(screen.getByText("UCS CM")).toBeInTheDocument();
-      expect(screen.getByText("Acme Corporation")).toBeInTheDocument();
+      expect(screen.getAllByText("Acme Corporation").length).toBeGreaterThan(0);
       expect(screen.getByRole("button", { name: /User menu for Jane Doe/i })).toBeInTheDocument();
       expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
     });

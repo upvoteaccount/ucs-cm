@@ -11,12 +11,10 @@ export const SkipLink: React.FC<SkipLinkProps> = ({
   style,
   ...props
 }) => {
-  const [isFocused, setIsFocused] = React.useState(false);
-
   const baseStyle: React.CSSProperties = {
-    position: isFocused ? "fixed" : "absolute",
-    top: isFocused ? "var(--space-2)" : "-9999px",
-    left: isFocused ? "var(--space-2)" : "-9999px",
+    position: "absolute",
+    top: "-9999px",
+    left: "-9999px",
     zIndex: 9999,
     padding: "var(--space-2) var(--space-4)",
     backgroundColor: "var(--action-primary)",
@@ -26,20 +24,21 @@ export const SkipLink: React.FC<SkipLinkProps> = ({
     borderRadius: "var(--radius-sm)",
     textDecoration: "none",
     boxShadow: "var(--shadow-subtle)",
+    ...style,
   };
 
   return (
-    <a
-      href={`#${targetId}`}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
-      style={{
-        ...baseStyle,
-        ...style,
-      }}
-      {...props}
-    >
-      {children}
-    </a>
+    <>
+      <style>{`
+        .ucs-skip-link:focus,
+        .ucs-skip-link:focus-visible {
+          top: var(--space-2) !important;
+          left: var(--space-2) !important;
+        }
+      `}</style>
+      <a href={`#${targetId}`} className="ucs-skip-link" style={baseStyle} {...props}>
+        {children}
+      </a>
+    </>
   );
 };

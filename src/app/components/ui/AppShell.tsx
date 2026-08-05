@@ -33,10 +33,14 @@ export const AppShell: React.FC<AppShellProps> = ({
         id="main-content"
         tabIndex={-1}
         style={{
-          flex: 1,
+          flex: "1 1 0%",
           display: "flex",
           flexDirection: "column",
+          width: "100%",
+          maxWidth: "1120px",
+          margin: "0 auto",
           padding: "var(--space-6)",
+          boxSizing: "border-box",
         }}
       >
         {children}

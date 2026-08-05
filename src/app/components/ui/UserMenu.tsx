@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useRef, useEffect, useId } from "react";
 import { ShellUser, ShellOrganisation, PlatformRole } from "./shellTypes";
 import { UserContext } from "./UserContext";
@@ -11,6 +13,8 @@ export interface UserMenuProps {
   organisation?: ShellOrganisation;
   roles?: PlatformRole[];
   onSignOut?: () => void;
+  isSignOutPending?: boolean;
+  signOutPendingText?: string;
 }
 
 export const UserMenu: React.FC<UserMenuProps> = ({
@@ -18,6 +22,8 @@ export const UserMenu: React.FC<UserMenuProps> = ({
   organisation,
   roles = [],
   onSignOut,
+  isSignOutPending = false,
+  signOutPendingText = "Signing out...",
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -53,19 +59,37 @@ export const UserMenu: React.FC<UserMenuProps> = ({
     document.addEventListener("mousedown", handleClickOutside);
 
     return () => {
-      document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isOpen]);
 
+  const firstName = user.displayName.split(" ")[0] || "Account";
+
   return (
     <div style={{ position: "relative", display: "inline-block" }}>
+      <style>{`
+        .ucs-user-menu-full {
+          display: inline;
+        }
+        .ucs-user-menu-short {
+          display: none;
+        }
+        @media (max-width: 640px) {
+          .ucs-user-menu-full {
+            display: none !important;
+          }
+          .ucs-user-menu-short {
+            display: inline !important;
+          }
+        }
+      `}</style>
       <button
         ref={triggerRef}
         type="button"
+        aria-label={`User menu for ${user.displayName}`}
         aria-expanded={isOpen}
         aria-controls={panelId}
-        aria-label={`User menu for ${user.displayName}`}
+        disabled={isSignOutPending}
         onClick={toggleMenu}
         style={{
           display: "inline-flex",
@@ -77,12 +101,14 @@ export const UserMenu: React.FC<UserMenuProps> = ({
           border: "1px solid var(--border-default)",
           backgroundColor: "var(--bg-surface)",
           color: "var(--text-primary)",
-          cursor: "pointer",
+          cursor: isSignOutPending ? "not-allowed" : "pointer",
+          opacity: isSignOutPending ? 0.7 : 1,
           fontSize: "var(--font-size-sm)",
           fontWeight: "var(--font-weight-medium)",
         }}
       >
-        <UserContext user={user} />
+        <span className="ucs-user-menu-full">{user.displayName}</span>
+        <span className="ucs-user-menu-short">{firstName}</span>
         <svg
           width="12"
           height="12"
@@ -90,11 +116,11 @@ export const UserMenu: React.FC<UserMenuProps> = ({
           fill="none"
           stroke="currentColor"
           strokeWidth="2"
-          aria-hidden="true"
           style={{
             transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
             transition: "transform var(--transition-speed)",
           }}
+          aria-hidden="true"
         >
           <path d="M6 9l6 6 6-6" />
         </svg>
@@ -122,26 +148,51 @@ export const UserMenu: React.FC<UserMenuProps> = ({
             gap: "var(--space-3)",
           }}
         >
+          {/* User Info */}
           <div>
             <UserContext user={user} showEmail />
           </div>
 
+          {/* Organisation Context */}
           {organisation && (
-            <div>
-              <div style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", marginBottom: "var(--space-1)" }}>
-                Active Organisation
+            <>
+              <Divider />
+              <div>
+                <span
+                  style={{
+                    display: "block",
+                    fontSize: "var(--font-size-xs)",
+                    fontWeight: "var(--font-weight-semibold)",
+                    color: "var(--text-secondary)",
+                    marginBottom: "var(--space-1)",
+                  }}
+                >
+                  Active organisation
+                </span>
+                <OrganisationContext organisation={organisation} />
               </div>
-              <OrganisationContext organisation={organisation} />
-            </div>
+            </>
           )}
 
-          {roles.length > 0 && (
-            <div>
-              <div style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", marginBottom: "var(--space-1)" }}>
-                Assigned Roles
+          {/* Role Badges */}
+          {roles && roles.length > 0 && (
+            <>
+              <Divider />
+              <div>
+                <span
+                  style={{
+                    display: "block",
+                    fontSize: "var(--font-size-xs)",
+                    fontWeight: "var(--font-weight-semibold)",
+                    color: "var(--text-secondary)",
+                    marginBottom: "var(--space-1)",
+                  }}
+                >
+                  Assigned roles
+                </span>
+                <RoleContext roles={roles} />
               </div>
-              <RoleContext roles={roles} />
-            </div>
+            </>
           )}
 
           <Divider />
@@ -149,7 +200,11 @@ export const UserMenu: React.FC<UserMenuProps> = ({
           <Button
             type="button"
             variant="secondary"
+            isPending={isSignOutPending}
+            pendingText={signOutPendingText}
+            disabled={isSignOutPending}
             onClick={() => {
+              if (isSignOutPending) return;
               setIsOpen(false);
               if (onSignOut) {
                 onSignOut();
