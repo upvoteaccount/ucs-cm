@@ -3,7 +3,7 @@
 | Increment | Title | Status | Target Scope | Approved Commit |
 | :--- | :--- | :--- | :--- | :--- |
 | **INC-01** | Project Foundation | **Approved and Committed** | Next.js App Router, Docker, Drizzle, PostgreSQL baseline | `e164040e76b50baa8ca3ba339f478f203b9cba9a` |
-| **INC-02** | Authentication, Organisations and Audit Foundation | **Approved and Committed** | Identity, org isolation, RBAC, session management, append-only audit | `150a0c672bc26cad12e825d5e90c481df6371024` |
+| **INC-02** | Authentication, Organisations and Audit Foundation | **Approved and Committed** | Identity, org isolation, RBAC, canonical GET/POST/DELETE session management & remediation, append-only audit | `150a0c672bc26cad12e825d5e90c481df6371024` |
 | **INC-03** | Solution, Case Type, Properties and Form Configuration | **In Progress** | Metadata schemas, 10 property types, form configuration, Design Studio UI | *In Progress* |
 | **INC-04** | Roles, Queues and Workflow Configuration | **Not Started, Not Yet Authorised** | Solution role assignment, state machine FSM, transition rules, queues | - |
 | **INC-05** | Validation, Publishing and Immutable Snapshots | **Not Started, Not Yet Authorised** | Immutable versioned snapshots, release management | - |

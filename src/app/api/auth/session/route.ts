@@ -35,6 +35,26 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function GET(req: NextRequest) {
+  try {
+    const token = req.cookies.get("ucs_session_token")?.value;
+    if (!token) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    const context = await authService.validateSession(token);
+    return NextResponse.json({
+      status: "SUCCESS",
+      context,
+    });
+  } catch (err: unknown) {
+    if (err instanceof AppError) {
+      return NextResponse.json({ error: err.message }, { status: err.statusCode });
+    }
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   try {
     const token = req.cookies.get("ucs_session_token")?.value;
