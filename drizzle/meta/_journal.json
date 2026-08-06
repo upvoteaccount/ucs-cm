@@ -15,6 +15,13 @@
       "when": 1785481822539,
       "tag": "0001_puzzling_turbo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786012528642,
+      "tag": "0002_narrow_bullseye",
+      "breakpoints": true
     }
   ]
 }
