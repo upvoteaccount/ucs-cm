@@ -39,7 +39,7 @@ export async function requirePlatformRoles(
     await auditService.recordEvent({
       organisationId: context.activeOrganisation.id,
       category: "SECURITY",
-      eventType: "ACCESS_DENIED",
+      eventType: "AUDIT_ACCESS_DENIED",
       actorType: "AUTHENTICATED_USER",
       actorUserId: context.user.id,
       actorIdentifier: context.user.email,

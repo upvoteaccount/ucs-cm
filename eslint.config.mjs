@@ -16,7 +16,7 @@ const eslintConfig = [
             {
               target: "./src/app",
               from: "./src/modules",
-              except: ["./*/index.ts", "./**/*.interface.ts", "./auth/index.ts", "./audit/index.ts"],
+              except: ["./*/index.ts", "./**/*.interface.ts", "./auth/index.ts", "./audit/index.ts", "./solution/index.ts", "./organisation/index.ts"],
               message: "Direct internal module file import into App UI layer prohibited; access modules strictly via their public entry point (index.ts) or interface.",
             },
             // Prevent Domain Modules from importing App UI code
@@ -29,7 +29,7 @@ const eslintConfig = [
             {
               target: "./src/shared",
               from: "./src/modules",
-              except: ["./*/index.ts", "./**/*.interface.ts", "./auth/index.ts", "./audit/index.ts"],
+              except: ["./*/index.ts", "./**/*.interface.ts", "./auth/index.ts", "./audit/index.ts", "./solution/index.ts", "./organisation/index.ts"],
               message: "Shared code cannot depend on internal business domain module implementations.",
             },
           ],
