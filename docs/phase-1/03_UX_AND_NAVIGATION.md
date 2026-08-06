@@ -9,8 +9,22 @@ Professional, clear, efficient, accessible, desktop-first responsive, polished e
 ## Areas
 Design Studio, Runtime Portal, Administration Console. Area switching is permission-based.
 
-## Design Studio
-Solutions → Overview → Case Type → Properties → Form → Roles → Queues → Workflow → Document Types → Validation → Publish → Version History.
+## Design Studio Navigation (INC-03 Baseline)
+Solutions Home (`/studio/solutions`) → Overview → Data → Form.
+
+- **Solutions Home**: Renders page heading and explanatory header text describing the solution portfolio. Displays solutions belonging strictly to the user's trusted active organisation context. Displays Solution Name, Solution Prefix / Key, Status (`Draft`), Last Updated timestamp, and an **Open** action trigger for each solution. Supports dedicated UI states: loading indicator during fetch, empty state with a "Create Solution" action trigger when zero solutions exist, and safe error state with recovery guidance if fetching fails.
+- **Create Solution Modal/Screen**: Captures Solution Name, Description, and an editable suggested Solution Prefix. The Solution Prefix (`solution_prefix`, e.g. `CDD`) is auto-suggested from Solution Name, normalized to uppercase, validated for active-organisation uniqueness, and serves as the primary prefix for generated technical property names (e.g. `CDD_customer_name`), while also being available for case number formatting (e.g. `CDD-KYC-000001`). Solution `key` is unified with or derived from `solution_prefix`.
+- **Active Studio Navigation**: Shows ONLY implemented active areas (Overview, Data, Form). Deferred Studio areas (Roles, Workflow, Document Types, Publishing) are not rendered as disabled navigation items.
+
+## One-Place Field Inspector Split Model
+When selecting a form field reference in Form Studio, the inspector panel exposes BOTH configuration tiers in a single inspector view without requiring the user to navigate back to the Data area for ordinary field changes:
+- **Canonical Data Dictionary Tier ("Applies everywhere")**: Stored data type, label, format preset (`EMAIL`, `PHONE`), choice list binding, default value, help text, minimum/maximum length or range constraints, pattern/regex validation rules.
+- **Form Reference Tier ("This form only")**: Form layout placement (tab, section), display ordering sequence, static visibility (`visible`), static enablement (`enabled`), static editability (`editable`), and static required state (`required`).
+
+## Studio Access Control & Landing Navigation
+- Possession of `PLATFORM_ADMIN` or `SOLUTION_DESIGNER` platform roles grants access to the INC-03 Studio landing at `/studio/solutions`.
+- Direct access to `/studio` by runtime-only users (without a design role) results in server-side denial with the existing approved forbidden experience (`/forbidden`).
+- Post-login `/landing` evaluates user roles, leaving runtime-only users on the neutral authenticated destination (`/landing`). Top-navigation application switcher is deferred.
 
 ## Runtime Portal
 My Work, Create Case, Search Cases, Recently Viewed, Notifications.
@@ -19,7 +33,7 @@ My Work, Create Case, Search Cases, Recently Viewed, Notifications.
 Cards for Claimed Tasks, Available Queue Tasks, Due Soon, Overdue, Recently Completed. Task table shows task, case, priority, queue, status, due date, claimant, actions.
 
 ## Case Creation
-Select solution and case type, complete generated form, upload required documents, review, submit, show generated case number. Errors appear inline and in a page summary without clearing entered values.
+Select solution, complete generated form, upload required documents, review, submit, show generated case number. Errors appear inline and in a page summary without clearing entered values.
 
 ## Case Workspace
 Header: case number, type, status, priority, stage, dates, creator. Sections: Case Details, Current Task, Documents, Comments, Audit Timeline.

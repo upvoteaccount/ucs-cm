@@ -29,8 +29,16 @@ UCS CM maintains two distinct audit perspectives (Section 16):
 +----------------------------------------------+   +--------------------------------------------+
 | - Case Created / Status Changed              |   | - Login Success / Login Failure / Logout   |
 | - Task Created / Claimed / Released / Done   |   | - User Created / Activated / Deactivated   |
-| - Document Uploaded / Viewed / Deleted       |   | - Solution Created / Validated / Published |
-| - Case Property Value Changes (Before/After) |   | - Unauthorized Access Attempts (HTTP 403)  |
+| - Document Uploaded / Viewed / Deleted       |   | - Solution Created / Solution Updated      |
+| - Case Property Value Changes (Before/After) |   | - Property Created / Updated / Deleted     |
+|                                              |   | - Choice List / Option Created / Updated / |
+|                                              |   |   Deactivated                             |
+|                                              |   | - Form Tab / Section Created / Updated /   |
+|                                              |   |   Deleted                                 |
+|                                              |   | - Form Field Added / Removed / Updated /   |
+|                                              |   |   Layout Reordered                        |
+|                                              |   | - Unauthorized Access Attempts (HTTP 403 / |
+|                                              |   |   AUDIT_ACCESS_DENIED)                    |
 +----------------------------------------------+   +--------------------------------------------+
 ```
 

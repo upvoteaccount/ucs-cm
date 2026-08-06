@@ -27,40 +27,40 @@ Layer 1: Identity & Multi-Tenancy
                                                       |
                                                       v
 Layer 2: Design Studio Subsystem
-                                      [ Solution & Versioning ]
+                                       [ Solution Aggregate Foundation ]
                                                       |
                                                       v
-                                      [ Schema & Form Designer ]
+                                       [ Solution Data Dictionary & Form Studio ]
                                                       |
                                                       v
-                                      [ Roles, Queues & Workflow ]
+                                       [ Roles, Queues & Workflow ]
                                                       |
                                                       v
-                                      [ Validation & Publishing ]
+                                       [ Validation & Publishing ]
                                                       |
                                                       v
 Layer 3: Runtime Execution Engine
-                                      [ Runtime Case Execution ]
+                                       [ Runtime Case Execution ]
                                                       |
                                                       v
-                                      [ Task Locking & Queue Claims ]
+                                       [ Task Locking & Queue Claims ]
                                                       |
                                                       v
-                                      [ Workflow FSM State Engine ]
+                                       [ Workflow FSM State Engine ]
                                                       |
                                                       v
 Layer 4: Case Auxiliary Services
-                                      [ Document Management & Viewer ]
+                                       [ Document Management & Viewer ]
                                                       |
                                                       v
-                                      [ Case Comments & Audit Log ]
+                                       [ Case Comments & Audit Log ]
                                                       |
                                                       v
 Layer 5: Portability & Verification
-                                      [ BFSI KYC Exception Reference ]
+                                       [ BFSI KYC Exception Reference ]
                                                       |
                                                       v
-                                      [ Healthcare Grievance Portability ]
+                                       [ Healthcare Grievance Portability ]
 ```
 
 ---
@@ -71,7 +71,7 @@ Layer 5: Portability & Verification
 | :--- | :--- | :--- | :--- | :--- |
 | **Step 1** | **Foundation & DB Schema** | Baseline Architecture Review | Drizzle ORM Schema, DB Migration scripts, `.env` config. | Database boots cleanly, migrations execute idempotently. |
 | **Step 2** | **Auth, Org & Audit Foundation** | Step 1 | Session Store, Auth Middleware, Org Guards, `AuditRepository` & DB Trigger. | Login/Logout flows, user activation, & initial audit events recorded. |
-| **Step 3** | **Design Studio: Schema** | Step 2 | Solution CRUD, Case Type, Property & Form Designer. | Solution Designer builds draft schema in UI with audit logging. |
+| **Step 3** | **Design Studio: Solution Data & Form** | Step 2 | Solution CRUD (Solutions Home with portfolio text, loading, empty, and safe error states; Create Solution with Name, Description, auto-suggested uppercase Solution Prefix), Data Dictionary (Base Types, Controls, Choice Lists, Property Identity Contract `<PREFIX>_<LOCAL_SYMBOLIC_NAME>`), Form Layout Studio (Default Tab, Sections, Unique Field References, One-Place Field Inspector with "Applies everywhere" vs "This form only" tiers), Property Deletion & Draft Mutation Guards, Optimistic Revisioning (`expectedRevision` with reload option on 409), Trusted Active Tenant Scoping (404 on foreign lookups), Role-Aware Access Guards. | Solution Designer builds draft solution, data dictionary, and form layout in UI with audit logging and access protection. |
 | **Step 4** | **Design Studio: Workflow** | Step 3 | Queue & Role Configurator, Sequential Workflow Designer. | Sequential workflow steps & outcomes configured with audit logging. |
 | **Step 5** | **Validation & Publishing** | Step 4 | Publishing Engine, Immutable Snapshot Compiler. | Solution validates, compiles snapshot, and records publish audit event. |
 | **Step 6** | **Runtime: Case Creation** | Step 5 | Dynamic Form Generator, Case Number Sequence Generator. | Runtime user submits case against published snapshot; case creation audited. |

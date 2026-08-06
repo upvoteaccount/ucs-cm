@@ -7,7 +7,17 @@
 | **REQ-AUTH-02** | Security | HTTP-Only SameSite Cookie Management | `src/app/api/auth/session/route.ts` | `logout.test.ts` | INC-02 | Verified |
 | **REQ-ORG-01** | Isolation | Multi-Tenant Organisation Scoping | `src/shared/tenant-repository.ts` | `auth.test.ts` | INC-02 | Verified |
 | **REQ-AUDIT-01** | Compliance | Append-Only Database Audit Trigger | `drizzle/0001_puzzling_turbo.sql` | `auth.test.ts` | INC-02 | Verified |
-| **REQ-META-01** | Metadata | Solution, Case Type, 10 Property Types & Forms | `src/modules/solution/` | INC-03 Test Suite | INC-03 | In Progress |
+| **REQ-META-01** | Metadata | Solutions Home (Heading, Portfolio List, Loading, Empty & Safe Error States) | TBD (INC-03B) | INC-03 Test Suite | INC-03 | In Progress |
+| **REQ-META-02** | Metadata | Create Solution (Name, Description, Auto-Suggested Uppercase Prefix) | TBD (INC-03B) | INC-03 Test Suite | INC-03 | In Progress |
+| **REQ-META-03** | Metadata | Approved Property Identity Contract (`<PREFIX>_<LOCAL_SYMBOLIC_NAME>`) | TBD (INC-03B) | INC-03 Test Suite | INC-03 | In Progress |
+| **REQ-META-04** | Metadata | Solution Data Dictionary (Core Types, Controls, Presets, Type-Control Matrix) | TBD (INC-03B) | INC-03 Test Suite | INC-03 | In Progress |
+| **REQ-META-05** | Metadata | Choice Lists (Ordered Options, Stable Option Keys, Option Deactivation) | TBD (INC-03B) | INC-03 Test Suite | INC-03 | In Progress |
+| **REQ-META-06** | Metadata | Form Layout Studio (Default Tab, Sections, Placement & Deletion Guards) | TBD (INC-03B) | INC-03 Test Suite | INC-03 | In Progress |
+| **REQ-META-07** | Metadata | One-Place Field Inspector ("Applies everywhere" vs "This form only" tiers) | TBD (INC-03B) | INC-03 Test Suite | INC-03 | In Progress |
+| **REQ-META-08** | Security | Trusted Active-Organisation Context Scoping (404 on Foreign Lookups) | TBD (INC-03B) | INC-03 Test Suite | INC-03 | In Progress |
+| **REQ-META-09** | Concurrency | Optimistic Concurrency Control (`expectedRevision` & 409 Reload Option) | TBD (INC-03B) | INC-03 Test Suite | INC-03 | In Progress |
+| **REQ-META-10** | Compliance | Synchronous Transactional Metadata Audit Event Matrix | TBD (INC-03B) | INC-03 Test Suite | INC-03 | In Progress |
+| **REQ-META-11** | Security | Studio Access Control (`/studio/solutions`, `/forbidden`) & Neutral Landing | TBD (INC-03B) | INC-03 Test Suite | INC-03 | In Progress |
 | **REQ-WORKFLOW-01**| Workflow | Solution Roles, Queues & FSM Transition Rules | `src/modules/workflow/` | INC-04 Test Suite | INC-04 | Not Started |
 | **REQ-PUB-01** | Publishing | Validation Rules, Release Publishing & Snapshots | `src/modules/publishing/` | INC-05 Test Suite | INC-05 | Not Started |
 | **REQ-RUNTIME-01** | Runtime | Runtime Case Creation & Dynamic Forms | `src/modules/case/` | INC-06 Test Suite | INC-06 | Not Started |

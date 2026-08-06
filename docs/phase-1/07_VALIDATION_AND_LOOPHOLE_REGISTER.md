@@ -6,7 +6,7 @@
 | ID | Risk | Prevention |
 |---|---|---|
 | VAL-001 | Incomplete publish | Blocking validator |
-| VAL-002 | Duplicate keys | Unique constraints |
+| VAL-002 | Duplicate keys | Unique constraint on symbolic keys: generated technical property name (`<PREFIX>_<LOCAL_SYMBOLIC_NAME>`) and choice-list key unique within Solution aggregate; Option key unique within Choice List |
 | VAL-003 | Draft runtime use | PUBLISHED-only guard |
 | VAL-004 | Published edit | Immutable snapshot |
 | VAL-005 | Unknown property | Backend allow-list |
@@ -33,5 +33,14 @@
 | VAL-026 | Silent supervisor change | Reason and audit |
 | VAL-027 | Case number collision | Scoped unique generator |
 | VAL-028 | Unsupported snapshot | Version-aware reader |
-| VAL-029 | Regex abuse | Restricted patterns and limits |
+| VAL-029 | Regex abuse | Restricted patterns, bounded length, approved syntax, unsafe-construct rejection, and controlled test execution |
 | VAL-030 | File I/O in task transaction | Architectural boundary |
+| VAL-031 | Deletion of form-referenced property | Authoritative backend property deletion guard |
+| VAL-032 | Mutation of used/non-draft property key or type | Key/type immutability guard once used within solution layout |
+| VAL-033 | Duplicate field reference in form layout | Backend layout validator enforcing property reference uniqueness |
+| VAL-034 | Stale metadata update in Design Studio | Optimistic concurrency `expectedRevision` check returning HTTP 409 Conflict with clear error message and reload option |
+| VAL-035 | Unauthorized Studio access by runtime user | Server-side role guard rendering approved forbidden experience (`/forbidden`) |
+| VAL-036 | Invalid data-type and control combination | Authoritative backend data dictionary type-control matrix validator |
+| VAL-037 | Request-body org ID spoofing / foreign tenant disclosure | Trusted active-organisation session context scoping; prohibited request-body org ID authority; 404 response on foreign lookups |
+| VAL-038 | Invalid Property Identity Contract | Authoritative validator enforcing `<PREFIX>_<LOCAL_SYMBOLIC_NAME>` rules (alphabetic start, <=64 chars, reserved name/char rejection) |
+| VAL-039 | Deactivated choice option selection | Server-side choice option status validator blocking selection of deactivated options on new entries |

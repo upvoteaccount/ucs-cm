@@ -62,8 +62,7 @@ UCS CM will not copy IBM source code, proprietary implementation details, brandi
 | --------------------------- | ------------------------------- |
 | Case Builder                | Design Studio                   |
 | Solution                    | Solution                        |
-| Case Type                   | Case Type                       |
-| Properties                  | Configurable Properties         |
+| Properties                  | Configurable Properties & Choice Lists |
 | Pages and Views             | Forms and Case Workspace        |
 | Roles                       | Solution Roles                  |
 | In-baskets                  | Work Queues                     |
@@ -235,8 +234,7 @@ A non-developer must be able to:
 
 ```text
 Create a solution
-→ Define one case type
-→ Add configurable properties
+→ Configure Data Dictionary & Choice Lists
 → Configure a form
 → Define solution roles
 → Configure work queues
@@ -345,73 +343,83 @@ Users can:
 * View solution status
 * Open the solution for configuration
 
-## 10.2 Case Type Designer
+## 10.1 Solutions Home & Solution Creation
 
 Users can:
 
-* Create one case type
-* Enter a case-type name
-* Enter a display label
-* Enter a description
-* Define a case-number prefix or format
-* Associate the case type with the solution
+* Access Solutions Home (`/studio/solutions`) displaying solutions belonging strictly to their trusted active organisation context.
+* View page heading and explanatory header text describing the solution portfolio.
+* View solution summary cards/rows displaying Solution Name, Solution Prefix / Key, Status (`Draft`), and Last Updated timestamp.
+* Trigger the **Open** action to enter the Design Studio for a solution.
+* Experience dedicated UI states: Loading indicator during fetch, Empty state with a "Create Solution" action trigger when no solutions exist, and a Safe Error state with recovery guidance if solution loading fails.
+* Trigger **Create Solution** action to open a creation form/modal.
+* Enter Solution Name and Description.
+* View an automatically suggested Solution Prefix derived from the Solution Name (with user editability).
+* The Solution Prefix (`solution_prefix`) is normalized to uppercase (e.g. `CDD`), validated for active-organisation uniqueness, and serves as the primary prefix for generated technical property names (while also available for case number formatting). The Solution `key` is unified with or deterministically derived from `solution_prefix`.
+* Save the solution as Draft and open it for configuration.
 
-The system architecture must not prevent multiple case types in future phases.
+## 10.2 Solution Aggregate & Data Ownership (Phase 1 Baseline)
 
-## 10.3 Property Designer
+In Phase 1, the Case Type layer is eliminated. A Solution application directly owns:
+* Solution Data Dictionary properties
+* Solution-owned reusable Choice Lists
+* Solution Form Layouts
 
-Users can create configurable properties.
+Choice-list selection cardinality ownership (whether single-select vs multi-select cardinality is specified on the Choice List definition or on the Property/Control binding) is recorded as UNRESOLVED and explicitly deferred to INC-03B design without structurally implying an answer.
 
-Phase 1 property types:
+## 10.3 Solution Data Dictionary & Property Identity Contract
 
-* Text
-* Long Text
-* Number
-* Date
-* Date and Time
-* Boolean
-* Dropdown
-* Email
-* Phone
-* User
-* Basic Grid or Repeating Table
+Users can create configurable Data Dictionary properties.
 
-Property configuration may include:
+### Property Identity Contract
+- **Local Symbolic Name**: Lowercase `snake_case` identifier entered by the user (e.g. `customer_name`).
+- **Solution Prefix**: Uppercase prefix owned by the solution aggregate (e.g. `CDD`).
+- **Generated Read-Only Technical Property Name**: Automatically constructed as `<PREFIX>_<LOCAL_SYMBOLIC_NAME>` (e.g. `CDD_customer_name`), containing exactly one underscore separator.
+- **Rules**: Must start with an alphabetic character, contain only alphanumeric and underscore characters, enforce maximum length of 64 characters, reject reserved names and unsupported characters, and enforce uniqueness within the Solution aggregate.
+- **Mutability**: Local symbolic name and data type are mutable ONLY while the property remains draft and unused within the solution layout.
 
-* Label
-* Stable internal key
-* Type
-* Required or optional
-* Default value
-* Help text
-* Minimum length
-* Maximum length
-* Pattern validation
-* Static dropdown options
-* Reusable lookup list
-* Sensitive or masked display
-* Read-only behaviour
+### Phase 1 Core Stored Data Types & UI Controls
+Core Stored Data Types:
+* Text (`TEXT`)
+* Number (`NUMBER`)
+* Date (`DATE`)
+* Date and Time (`DATETIME`)
+* Boolean (`BOOLEAN`)
+* User Reference (`USER_REFERENCE`)
 
-API-driven dynamic dropdowns are not required in the first Phase 1 implementation.
+UI Form Controls & Format Presets:
+* Text input (`TEXT_INPUT`)
+* Textarea (`TEXTAREA`)
+* Email preset (`TEXT` with `EMAIL` format preset)
+* Phone preset (`TEXT` with `PHONE` format preset)
+* Dropdown and Choice Radio (backed by solution-owned Choice Lists for `TEXT`/`NUMBER` data types)
+* Single Checkbox and Yes/No Radio (backed directly by `BOOLEAN` stored data type; do NOT require or use a Choice List)
+* Date picker, Date-Time picker, Number input, User picker
 
-## 10.4 Form Designer
+Grid / Repeating Table is explicitly deferred.
+
+### Boolean Semantics
+A single Boolean checkbox and Yes/No Boolean radio do NOT require or use a choice list. Checkbox-group support remains deferred pending an approved multi-choice contract.
+
+## 10.4 Form Designer & One-Place Field Inspector
 
 Users can:
 
-* Add configured properties to a form
-* Remove properties from the form
-* Organise fields into sections
-* Organise fields into tabs where practical
-* Change field order
-* Configure visibility
-* Configure read-only behaviour
-* Preview the form
+* Add Data Dictionary properties to a form layout
+* Remove property references from the form layout
+* Organise fields into sections and tabs (initial layout starts with one default tab provisioned on creation)
+* Reorder fields deterministically using move-up / move-down controls
+* Configure field reference settings via a **One-Place Field Inspector**
 
-Phase 1 does not require an unrestricted drag-and-drop form canvas.
-
-Move-up, move-down and structured layout controls are acceptable.
+### One-Place Field Inspector Split
+Selecting a form field in Form Studio exposes BOTH configuration tiers in a single inspector panel without requiring navigation back to the Data area for ordinary field changes:
+- **Canonical Data Dictionary Tier ("Applies everywhere")**: Stored data type, label, format preset (`EMAIL`, `PHONE`), choice list binding, default value, help text, minimum/maximum length or range constraints, pattern/regex validation rules.
+- **Form Reference Tier ("This form only")**: Form layout placement (tab, section), display ordering sequence, static visibility (`visible`), static enablement (`enabled`), static editability (`editable`), and static required state (`required`).
 
 ## 10.5 Role Designer
+
+> [!NOTE]
+> Deferred in INC-03; capability planned for INC-04.
 
 Users can define solution-specific roles.
 
@@ -423,6 +431,9 @@ Platform roles and solution roles must remain separate concepts.
 
 ## 10.6 Queue Designer
 
+> [!NOTE]
+> Deferred in INC-03; capability planned for INC-04.
+
 Users can:
 
 * Create work queues
@@ -433,6 +444,9 @@ Users can:
 Tasks are routed to queues rather than being directly assigned to one fixed user by default.
 
 ## 10.7 Workflow Designer
+
+> [!NOTE]
+> Deferred in INC-03; capability planned for INC-04.
 
 The workflow designer will support a controlled visual sequential model.
 
@@ -462,6 +476,9 @@ Full BPMN modelling is excluded.
 
 ## 10.8 Document Type Designer
 
+> [!NOTE]
+> Deferred in INC-03; capability planned for INC-09.
+
 Users can:
 
 * Create document types
@@ -471,6 +488,9 @@ Users can:
 * Associate document requirements with case creation or workflow steps
 
 ## 10.9 Validate and Publish
+
+> [!NOTE]
+> Deferred in INC-03; capability planned for a later authorised publishing increment (INC-05). INC-03 provides optimistic concurrency revisioning (`expectedRevision` counter returning HTTP 409 Conflict on stale updates) for draft solution configurations.
 
 Users can:
 
@@ -505,7 +525,6 @@ Users see tasks according to their solution roles and queue permissions.
 An authorised user can:
 
 * Select a published solution
-* Select an available case type
 * Open the metadata-generated creation form
 * Enter required data
 * Upload permitted documents
@@ -750,7 +769,7 @@ Search fields may include:
 
 * Case number
 * Reference number
-* Case type
+* Solution
 * Case status
 * Created date
 * Created by
@@ -901,7 +920,6 @@ Recommended portability solution:
 ```text
 Industry: Healthcare
 Solution: Patient Grievance Management
-Case Type: Patient Grievance
 ```
 
 The portability solution must use:
@@ -928,7 +946,7 @@ Application
 ├── Authentication and Access
 ├── Organisation Management
 ├── Solution Configuration
-├── Case Type Configuration
+├── Solution Data Dictionary
 ├── Properties and Forms
 ├── Roles and Queues
 ├── Workflow Configuration
@@ -937,7 +955,6 @@ Application
 ├── Task Execution
 ├── Documents
 ├── Comments
-├── Notifications
 └── Audit
 ```
 
@@ -1122,7 +1139,7 @@ Phase 1 is complete when the following scenario succeeds:
 
 1. An administrator creates the required fictional users.
 2. A Solution Designer creates the Customer Due Diligence Management solution.
-3. The Solution Designer creates the KYC Exception case type.
+3. The Solution Designer configures the Solution Data Dictionary and Choice Lists.
 4. Configurable properties are defined.
 5. The case form is configured.
 6. Solution roles are created.
@@ -1131,7 +1148,7 @@ Phase 1 is complete when the following scenario succeeds:
 9. Document types are defined.
 10. The platform validates the configuration.
 11. The solution is published as an immutable version.
-12. An authorised runtime user creates a KYC Exception case.
+12. An authorised runtime user creates a CDD case.
 13. The platform generates a case number.
 14. The first task enters the correct queue.
 15. An eligible user claims and locks the task.

@@ -9,23 +9,43 @@
 - Deactivation revokes access on next protected request.
 - Failed logins return generic errors and masked audit events.
 
-## Organisation Isolation
-- Every tenant-owned request is organisation-scoped.
-- Cross-organisation access is denied without revealing record existence.
+## Organisation Isolation & Tenant Security
+- Trusted active-organisation context from authenticated session is authoritative. Request-body organisation IDs must never be trusted as authority.
+- Global entity lookups followed by tenant checks are prohibited; active organisation filters must be embedded directly in initial query criteria.
+- Requests targeting foreign-organisation resources return 404 Not Found without disclosing record existence.
 
 ## Design Studio
-- Create Draft solution with stable key.
-- Exactly one case type in Phase 1 UI.
-- Ten mandatory property types (Grid / Repeating Table remains stretch scope).
-- Ordered form sections and fields.
-- Configurable roles, queues, workflow steps, outcomes, document types.
-- Published versions are immutable; subsequent changes use a new Draft.
+- **Solutions Home**: Access at `/studio/solutions`. Renders page heading and explanatory header text describing the solution portfolio, listing solutions belonging strictly to the user's trusted active organisation. Each solution row/card displays Solution Name, Solution Prefix / Key, Status (`Draft`), Last Updated timestamp, and an **Open** action trigger. Supports dedicated UI states: loading indicator during fetch, empty state with "Create Solution" trigger when zero solutions exist, and safe error state with recovery guidance if fetching fails.
+- **Create Solution**: Modal/screen requiring Solution Name, Description, and editable suggested Solution Prefix. Prefix is auto-suggested from Solution Name, normalized to uppercase, validated for active-organisation uniqueness, and serves as the primary prefix for generated technical property names (while also available for case numbering formatting). Solution `key` is unified with or deterministically derived from `solution_prefix`.
+- **Approved Property Identity Contract**:
+  - **Local Symbolic Name**: Lowercase `snake_case` identifier entered by user (e.g. `customer_name`).
+  - **Solution Prefix**: Uppercase prefix owned by Solution aggregate (e.g. `CDD`).
+  - **Generated Read-Only Technical Property Name**: Automatically constructed as `<PREFIX>_<LOCAL_SYMBOLIC_NAME>` (e.g. `CDD_customer_name`), containing exactly one underscore separator.
+  - **Rules**: Must start with an alphabetic character, contain only alphanumeric and underscore characters, enforce maximum length of 64 characters, reject reserved names and unsupported characters, and enforce uniqueness within the Solution aggregate.
+  - **Mutability**: Local symbolic name and data type are mutable ONLY while the property remains draft and unused within the solution layout.
+- **Aggregate Data Ownership**: Solution directly owns Data Dictionary properties, reusable Choice Lists, and Form layouts. Choice-list selection cardinality ownership (whether single-select vs multi-select cardinality is specified on the Choice List definition or on the Property/Control binding) is recorded as UNRESOLVED and explicitly deferred to INC-03B design without structurally implying an answer.
+- **Core Stored Data Types & UI Controls**: Core stored data types (`TEXT`, `NUMBER`, `DATE`, `DATETIME`, `BOOLEAN`, `USER_REFERENCE`) are separated from UI form controls.
+- **Boolean Semantics**: A single Boolean checkbox and Yes/No Boolean radio do NOT require or use a choice list. Checkbox-group support remains deferred pending an approved multi-choice contract.
+- **Choice Lists**: Solution-owned reusable entities storing ordered options with stable option keys, labels, and active states. Choice-list keys are unique within Solution; option keys are unique within Choice List. Option deactivation preserves historical data integrity while preventing new selection.
+- **Form Layout Studio**: Initial form layout starts with one default tab when provisioned, containing sections and unique field references pointing to data dictionary properties. A property may appear only once in the same form.
+- **One-Place Field Inspector Split**: Selecting a form field in Form Studio exposes BOTH configuration tiers in a single inspector panel without requiring navigation back to Data area for ordinary field changes:
+  - **Canonical Data Dictionary Tier ("Applies everywhere")**: Stored data type, label, format preset (`EMAIL`, `PHONE`), choice list binding, default value, help text, minimum/maximum length or range constraints, pattern/regex validation rules.
+  - **Form Reference Tier ("This form only")**: Form layout placement (tab, section), display ordering sequence, static visibility (`visible`), static enablement (`enabled`), static editability (`editable`), and static required state (`required`).
+- **Property Lifecycle Protection**: Data dictionary properties referenced in a form layout cannot be deleted.
+- **Regex Safety**: Preset regexes (`EMAIL`, `PHONE`, Alpha, Alphanumeric) and bounded custom regex patterns require bounded length, approved syntax, unsafe-construct rejection, and controlled test execution with user feedback.
+- **Deferred Capabilities**: Solution publishing engine and immutable published snapshot compilation are deferred to a later authorised publishing increment (INC-05).
 
-## Validation and Publishing
-- Backend validation is authoritative.
-- Blocking errors prevent publication.
-- Publish compiles an immutable versioned snapshot.
-- Runtime cases bind to the exact published version.
+## Validation and Concurrency
+- Backend validation engine is authoritative.
+- Blocking metadata validation errors prevent layout saving.
+- **Optimistic Concurrency Control**: Every mutable metadata update request MUST supply an `expectedRevision` payload parameter. Stale updates with mismatched `expectedRevision` return HTTP 409 Conflict without automatic merge or silent overwrite, providing a clear error message and client reload option. A failed update changes NOTHING in the database and generates NO audit record or updated metadata. The exact revision boundary model (solution-level vs component-level revision counter) is explicitly recorded as an INC-03B implementation decision.
+
+## Audit Subsystem Architecture
+- Append-only repository and database trigger protection enforce immutability.
+- All metadata audit records commit synchronously within the exact same database transaction as successful mutations. If a mutation transaction rolls back, no audit record is written.
+- Audit records capture actor context (`actor_user_id`), active organisation context (`organisation_id`), action event type, timestamp, and compact masked payloads (`before_state`, `after_state`, `metadata`).
+- Exact transactional metadata mutation event matrix: `SOLUTION_CREATED`, `SOLUTION_UPDATED`, `PROPERTY_CREATED`, `PROPERTY_UPDATED`, `PROPERTY_DELETED`, `CHOICE_LIST_CREATED`, `CHOICE_LIST_UPDATED`, `CHOICE_OPTION_CREATED`, `CHOICE_OPTION_UPDATED`, `CHOICE_OPTION_DEACTIVATED`, `FORM_TAB_CREATED`, `FORM_TAB_UPDATED`, `FORM_TAB_DELETED`, `FORM_SECTION_CREATED`, `FORM_SECTION_UPDATED`, `FORM_SECTION_DELETED`, `FORM_FIELD_ADDED`, `FORM_FIELD_REMOVED`, `FORM_FIELD_UPDATED`, `FORM_LAYOUT_REORDERED`.
+- Security audit event: `AUDIT_ACCESS_DENIED` logs unauthorized HTTP 403 access attempts. `STALE_UPDATE_REJECTED` is excluded because rejected-change auditing is not an approved platform pattern.
 
 ## Runtime Cases
 - Authorised users create cases from published metadata-generated forms.

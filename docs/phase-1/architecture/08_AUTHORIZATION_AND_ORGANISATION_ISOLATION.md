@@ -15,9 +15,10 @@ This document defines the multi-tenant organisation isolation model, Role-Based 
 
 ---
 
-## 2. Multi-Tenant Organisation Boundary Model
-
-Even though Phase 1 operates with a single organisation during demonstration, every record in the system MUST be directly organisation-scoped (`organisation_id`) or inherit an enforceable organisation boundary through its parent relationship (e.g. `tasks` via `case.organisation_id` and explicit `organisation_id` on the task record).
+### Trusted Active-Organisation Isolation Rules
+1. **Authoritative Session Context**: The user's active `organisation_id` is extracted strictly from their authenticated session. Request-body or client-supplied organisation IDs are NEVER trusted as authority.
+2. **Direct SQL Query Scoping**: All database queries must embed `WHERE organisation_id = session.organisation_id` directly in initial SQL query criteria. Global entity lookups followed by post-query tenant checks are strictly prohibited.
+3. **Non-Disclosure Security**: Requests targeting non-existent or foreign-tenant resources return HTTP 404 Not Found without disclosing foreign record existence. Explicit unauthorized action attempts within the tenant return HTTP 403 Forbidden and log `AUDIT_ACCESS_DENIED`.
 
 ```text
                                +---------------------------------------+
@@ -27,18 +28,18 @@ Even though Phase 1 operates with a single organisation during demonstration, ev
                                                    |
                                                    v
 +---------------------------------------------------------------------------------------------------+
-| Central API Middleware: Organisation Isolation Guard                                              |
+| Central API Middleware & Tenant Repository: Organisation Isolation Guard                          |
 |                                                                                                   |
-|  - Intercepts incoming API request                                                                |
-|  - Compares session.organisation_id against target record.organisation_id                         |
-|  - Appends `WHERE organisation_id = session.organisation_id` to ALL DB queries                   |
+|  - Reads trusted session.organisation_id                                                          |
+|  - Ignores client request-body organisation_id                                                    |
+|  - Embeds `WHERE organisation_id = session.organisation_id` into initial database query           |
 +---------------------------------------------------------------------------------------------------+
                                                    |
                         +--------------------------+--------------------------+
                         |                                                     |
                         v                                                     v
-         [ Match: Request Proceeds ]                           [ Mismatch: HTTP 403 Forbidden ]
-         (Access granted within tenant)                        (Logged as AUDIT_ACCESS_DENIED)
+         [ Match: Request Proceeds ]                           [ Missing/Mismatch: HTTP 404 Not Found ]
+         (Access granted within tenant)                        (Foreign existence shielded)
 ```
 
 ---
@@ -65,8 +66,12 @@ Platform Roles and Solution Roles are strictly separated concepts (Section 10.5,
 +------------------------------------+                                 +------------------------------------+
 | Controls access to:                |                                 | Controls access to:                |
 | - Admin Console (/admin)           |                                 | - Solution Work Queues             |
-| - Design Studio (/studio)          |                                 | - Task Claiming & Execution        |
-| - Runtime Portal (/portal)         |                                 | - Specific Form Field Editability  |
+| - Design Studio (/studio/solutions)|                                 | - Task Claiming & Execution        |
+|   (Requires PLATFORM_ADMIN or      |                                 | - Specific Form Field Editability  |
+|    SOLUTION_DESIGNER role;         |                                 |                                    |
+|    runtime-only user denied with   |                                 |                                    |
+|    approved forbidden experience   |                                 |                                    |
+|    `/forbidden`)                   |                                 |                                    |
 +------------------------------------+                                 +------------------------------------+
 ```
 

@@ -3,7 +3,6 @@
 
 **Document Status:** Approved Product Specification  
 **Solution:** Customer Due Diligence Management  
-**Case Type:** KYC Exception
 
 ## Purpose
 Defines the complete fictional BFSI reference configuration used to prove UCS CM without hard-coded BFSI logic.
@@ -12,41 +11,60 @@ Defines the complete fictional BFSI reference configuration used to prove UCS CM
 | Item | Value |
 |---|---|
 | Solution Key | CDD |
-| Case Type Key | KYC_EXCEPTION |
 | Case Number | CDD-KYC-{6-digit sequence} |
 | Initial Status | NEW |
 | Final Statuses | CLOSED_APPROVED / CLOSED_REJECTED |
 
-## Mandatory Property Types
-Text, Long Text, Number, Date, Date and Time, Boolean, Dropdown, Email, Phone, User. Grid / Repeating Table remains stretch scope.
+## Solution Data Dictionary Primitives
+Core stored types (`TEXT`, `NUMBER`, `DATE`, `DATETIME`, `BOOLEAN`, `USER_REFERENCE`), UI form controls (Text input, Textarea, Dropdown, Multi-select, Radio, Checkbox, Date picker, Date-Time picker, Number input, User picker), format presets (`EMAIL`, `PHONE`), and solution-owned Choice Lists. Grid / Repeating Table is explicitly deferred.
 
-## Case Properties
-| Key | Label | Type | Creation Required | Sensitive |
-|---|---|---|---:|---:|
-| customer_name | Customer Name | Text | Yes | No |
-| customer_reference | Customer Reference | Text | Yes | Yes |
-| date_of_birth | Date of Birth | Date | Yes | Yes |
-| email_address | Email Address | Email | No | Yes |
-| mobile_number | Mobile Number | Phone | Yes | Yes |
-| exception_type | Exception Type | Dropdown | Yes | No |
-| exception_description | Exception Description | Long Text | Yes | No |
-| risk_rating | Risk Rating | Dropdown | No | No |
-| discrepancy_count | Discrepancy Count | Number | No | No |
-| documents_verified | Documents Verified | Boolean | No | No |
-| review_due_date | Review Due Date | Date and Time | No | No |
-| assigned_compliance_user | Assigned Compliance User | User | No | No |
-| reviewer_comments | Reviewer Comments | Long Text | No | No |
-| compliance_comments | Compliance Comments | Long Text | No | No |
-| final_decision_reason | Final Decision Reason | Long Text | No | No |
-| final_decision_date | Final Decision Date | Date and Time | No | No |
-| created_channel | Created Channel | Dropdown | Yes | No |
-| priority | Priority | Dropdown | Yes | No |
+## Canonical Data Dictionary Definitions
+Canonical property storage definitions are owned by the Solution Data Dictionary. Form presentation controls are configured separately in the Form Studio.
 
-## Form Sections
-1. Customer Details
-2. Exception Details
-3. Review Details
-4. Final Decision
+| Local Symbolic Name | Generated Technical Property Name | Label | Stored Data Type | Format Preset / Choice List | Creation Required | Sensitive |
+|---|---|---|---|---|---:|---:|
+| customer_name | CDD_customer_name | Customer Name | TEXT | None | Yes | No |
+| customer_reference | CDD_customer_reference | Customer Reference | TEXT | None | Yes | Yes |
+| date_of_birth | CDD_date_of_birth | DATE | None | Yes | Yes |
+| email_address | CDD_email_address | TEXT | EMAIL format preset | No | Yes |
+| mobile_number | CDD_mobile_number | TEXT | PHONE format preset | Yes | Yes |
+| exception_type | CDD_exception_type | TEXT | Choice List: ExceptionTypes | Yes | No |
+| exception_description | CDD_exception_description | TEXT | None | Yes | No |
+| risk_rating | CDD_risk_rating | TEXT | Choice List: RiskRatings | No | No |
+| discrepancy_count | CDD_discrepancy_count | NUMBER | Integer constraint | No | No |
+| documents_verified | CDD_documents_verified | BOOLEAN | None (Single Checkbox) | No | No |
+| review_due_date | CDD_review_due_date | DATETIME | None | No | No |
+| assigned_compliance_user | CDD_assigned_compliance_user | USER_REFERENCE | Active Compliance Users | No | No |
+| reviewer_comments | CDD_reviewer_comments | TEXT | None | No | No |
+| compliance_comments | CDD_compliance_comments | TEXT | None | No | No |
+| final_decision_reason | CDD_final_decision_reason | TEXT | None | No | No |
+| final_decision_date | CDD_final_decision_date | DATETIME | None | No | No |
+| created_channel | CDD_created_channel | TEXT | Choice List: IntakeChannels | Yes | No |
+| priority | CDD_priority | TEXT | Choice List: Priorities | Yes | No |
+
+## Initial Form Layout & Presentation Controls
+Form presentation controls and field placement are configured on the Form layout reference tier:
+
+| Property Reference | Section | UI Form Control / Presentation | Default States |
+|---|---|---|---|
+| customer_name | Customer Details | Text input | Visible, Enabled, Required |
+| customer_reference | Customer Details | Text input | Visible, Enabled, Required |
+| date_of_birth | Customer Details | Date picker | Visible, Enabled, Required |
+| email_address | Customer Details | Text input (EMAIL format) | Visible, Enabled, Optional |
+| mobile_number | Customer Details | Text input (PHONE format) | Visible, Enabled, Required |
+| exception_type | Exception Details | Dropdown | Visible, Enabled, Required |
+| exception_description | Exception Details | Textarea | Visible, Enabled, Required |
+| created_channel | Exception Details | Dropdown | Visible, Enabled, Required |
+| priority | Exception Details | Dropdown | Visible, Enabled, Required |
+| risk_rating | Review Details | Dropdown | Visible, Enabled, Optional |
+| discrepancy_count | Review Details | Number input | Visible, Enabled, Optional |
+| documents_verified | Review Details | Single Checkbox | Visible, Enabled, Optional |
+| review_due_date | Review Details | Date-Time picker | Visible, Enabled, Optional |
+| assigned_compliance_user | Review Details | User picker | Visible, Enabled, Optional |
+| reviewer_comments | Review Details | Textarea | Visible, Enabled, Optional |
+| compliance_comments | Review Details | Textarea | Visible, Enabled, Optional |
+| final_decision_reason | Final Decision | Textarea | Visible, Enabled, Optional |
+| final_decision_date | Final Decision | Date-Time picker | Visible, Enabled, Optional |
 
 ## Roles and Queues
 | Role | Queue |
