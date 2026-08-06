@@ -1,4 +1,4 @@
-import { eq, and, asc, count } from "drizzle-orm";
+import { eq, and, asc, count, sql } from "drizzle-orm";
 import { getDb } from "../../infrastructure/db/client";
 import {
   solutions,
@@ -21,7 +21,7 @@ export interface SolutionPropertyRow {
   defaultValue: string | null;
   helpText: string | null;
   isSensitive: boolean;
-  validationRules: Record<string, unknown>;
+  validationRules: Record<string, unknown> | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -207,7 +207,7 @@ export class SolutionPropertyRepository {
       defaultValue?: string | null;
       helpText?: string | null;
       isSensitive?: boolean;
-      validationRules?: Record<string, unknown>;
+      validationRules?: Record<string, unknown> | null;
     }
   ): Promise<SolutionPropertyRow> {
     const [row] = await tx
@@ -224,7 +224,7 @@ export class SolutionPropertyRepository {
         defaultValue: data.defaultValue || null,
         helpText: data.helpText || null,
         isSensitive: data.isSensitive ?? false,
-        validationRules: data.validationRules || {},
+        validationRules: (data.validationRules !== null && data.validationRules !== undefined) ? data.validationRules : sql`'null'::jsonb`,
       })
       .returning();
 
@@ -249,7 +249,7 @@ export class SolutionPropertyRepository {
       defaultValue?: string | null;
       helpText?: string | null;
       isSensitive?: boolean;
-      validationRules?: Record<string, unknown>;
+      validationRules?: Record<string, unknown> | null;
     }
   ): Promise<SolutionPropertyRow | null> {
     const now = new Date();
@@ -267,7 +267,9 @@ export class SolutionPropertyRepository {
     if (data.defaultValue !== undefined) updateValues.defaultValue = data.defaultValue;
     if (data.helpText !== undefined) updateValues.helpText = data.helpText;
     if (data.isSensitive !== undefined) updateValues.isSensitive = data.isSensitive;
-    if (data.validationRules !== undefined) updateValues.validationRules = data.validationRules;
+    if (data.validationRules !== undefined) {
+      updateValues.validationRules = data.validationRules !== null ? data.validationRules : sql`'null'::jsonb`;
+    }
 
     const [updatedRow] = await tx
       .update(solutionProperties)

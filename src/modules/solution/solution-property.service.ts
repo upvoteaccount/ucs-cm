@@ -7,6 +7,7 @@ import {
   SolutionPropertyRow,
 } from "./solution-property.repository";
 import { constructGeneratedTechnicalName } from "./solution-identity";
+import { canonicalizeValidationRules } from "./property-validation.service";
 import {
   NotFoundError,
   ValidationError,
@@ -21,6 +22,21 @@ export const APPROVED_STORED_TYPES = new Set([
   "DATETIME",
   "USER_REFERENCE",
 ]);
+
+function maskSensitiveValidationRules(rules: Record<string, unknown> | null | undefined, isSensitive: boolean): any {
+  if (!rules || !isSensitive) return rules;
+  if (rules.customRegex && typeof rules.customRegex === "object") {
+    const cr = rules.customRegex as Record<string, unknown>;
+    return {
+      ...rules,
+      customRegex: {
+        pattern: "*****",
+        flags: cr.flags,
+      },
+    };
+  }
+  return rules;
+}
 
 export const APPROVED_FORMAT_PRESETS = new Set(["NONE", "EMAIL", "PHONE"]);
 export const APPROVED_CARDINALITIES = new Set(["SINGLE", "MULTIPLE"]);
@@ -200,9 +216,11 @@ export class SolutionPropertyService {
       }
     }
 
-    const db = getDb();
+    // Canonicalize and validate rules BEFORE starting transaction so invalid rules produce zero mutation
+    const canonicalRules = canonicalizeValidationRules(dataType, preset, input.validationRules);
 
     try {
+      const db = getDb();
       return await db.transaction(async (tx) => {
         // 1. Single atomic compare-and-update operation to increment Solution revision
         const updatedSolution = await solutionRepository.updateSolutionInTx(
@@ -232,11 +250,12 @@ export class SolutionPropertyService {
           defaultValue: input.defaultValue ?? null,
           helpText: input.helpText ?? null,
           isSensitive: input.isSensitive ?? false,
-          validationRules: input.validationRules || {},
+          validationRules: canonicalRules as Record<string, unknown> | null,
         });
 
         // Mask sensitive defaults or validation rules in audit payload
         const auditDefault = property.isSensitive ? "[REDACTED]" : property.defaultValue;
+        const auditRules = maskSensitiveValidationRules(property.validationRules, property.isSensitive);
 
         // 3. Record PROPERTY_CREATED audit event in the same transaction
         await tx.insert(auditEvents).values({
@@ -260,6 +279,7 @@ export class SolutionPropertyService {
             cardinality: property.cardinality,
             defaultValue: auditDefault,
             isSensitive: property.isSensitive,
+            validationRules: auditRules,
           },
           metadata: {
             expectedRevision: input.expectedRevision,
@@ -403,6 +423,10 @@ export class SolutionPropertyService {
 
     const db = getDb();
 
+    const canonicalRulesToUpdate = input.validationRules !== undefined
+      ? canonicalizeValidationRules(dataType, preset, input.validationRules)
+      : undefined;
+
     try {
       return await db.transaction(async (tx) => {
         // 1. Single atomic compare-and-update operation to increment Solution revision
@@ -436,7 +460,7 @@ export class SolutionPropertyService {
             defaultValue: input.defaultValue,
             helpText: input.helpText,
             isSensitive: input.isSensitive,
-            validationRules: input.validationRules,
+            validationRules: canonicalRulesToUpdate as Record<string, unknown> | null | undefined,
           }
         );
 
@@ -447,6 +471,8 @@ export class SolutionPropertyService {
         // Mask sensitive values in audit payload
         const beforeDefault = currentProperty.isSensitive ? "[REDACTED]" : currentProperty.defaultValue;
         const afterDefault = updatedProp.isSensitive ? "[REDACTED]" : updatedProp.defaultValue;
+        const beforeRules = maskSensitiveValidationRules(currentProperty.validationRules, currentProperty.isSensitive);
+        const afterRules = maskSensitiveValidationRules(updatedProp.validationRules, updatedProp.isSensitive);
 
         // 3. Record PROPERTY_UPDATED audit event in the same transaction
         await tx.insert(auditEvents).values({
@@ -467,6 +493,7 @@ export class SolutionPropertyService {
             cardinality: currentProperty.cardinality,
             defaultValue: beforeDefault,
             isSensitive: currentProperty.isSensitive,
+            validationRules: beforeRules,
           },
           afterState: {
             label: updatedProp.label,
@@ -477,6 +504,7 @@ export class SolutionPropertyService {
             cardinality: updatedProp.cardinality,
             defaultValue: afterDefault,
             isSensitive: updatedProp.isSensitive,
+            validationRules: afterRules,
           },
           metadata: {
             expectedRevision: input.expectedRevision,
