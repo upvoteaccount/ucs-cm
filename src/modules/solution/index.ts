@@ -5,3 +5,5 @@ export * from "./solution-property.repository";
 export * from "./solution-property.service";
 export * from "./choice-list.repository";
 export * from "./choice-list.service";
+export * from "./form.repository";
+export * from "./form.service";
