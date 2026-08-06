@@ -1,17 +1,3 @@
-import { ShellUser, ShellOrganisation } from "@/app/components/ui";
-
-const shellFixture = {
-  user: {
-    id: "fixture-user",
-    displayName: "Aarav Mehta",
-    email: "aarav.mehta@example.invalid",
-  } as ShellUser,
-  organisation: {
-    id: "fixture-org",
-    name: "Acme Financial Services",
-  } as ShellOrganisation,
-};
-
 export default function LandingPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
@@ -48,7 +34,7 @@ export default function LandingPage() {
             Current solution context
           </h2>
           <p style={{ fontSize: "var(--font-size-sm)", color: "var(--text-secondary)", lineHeight: "1.6" }}>
-            You are signed in as <strong>{shellFixture.user.displayName}</strong> under <strong>{shellFixture.organisation.name}</strong>. Available product areas will appear here based on your access.
+            Available product areas will appear here based on your access.
           </p>
         </div>
       </section>

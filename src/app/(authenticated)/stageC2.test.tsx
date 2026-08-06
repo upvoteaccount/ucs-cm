@@ -373,4 +373,17 @@ describe("Stage E Authenticated Layout Server Component Boundary Suite", () => {
     expect(headerProps.roles).toEqual(["PLATFORM_ADMIN"]);
     expect(headerProps.roles).not.toContain("SUPERVISOR");
   });
+
+  it("verifies production landing page content contains no hardcoded synthetic fixture identity", () => {
+    render(<LandingPage />);
+
+    expect(screen.getByRole("heading", { level: 1, name: "Welcome to UCS CM" })).toBeInTheDocument();
+    expect(screen.getByText("Your case management workspace.")).toBeInTheDocument();
+    expect(screen.getByText("Available product areas will appear here based on your access.")).toBeInTheDocument();
+
+    // Verify zero hardcoded synthetic identities in production landing content
+    expect(screen.queryByText("Aarav Mehta")).not.toBeInTheDocument();
+    expect(screen.queryByText("Acme Financial Services")).not.toBeInTheDocument();
+    expect(screen.queryByText("aarav.mehta@example.invalid")).not.toBeInTheDocument();
+  });
 });
