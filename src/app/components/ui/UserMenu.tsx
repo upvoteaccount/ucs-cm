@@ -250,11 +250,37 @@ export const UserMenu: React.FC<UserMenuProps> = ({
             </div>
           )}
 
+          {/* Design Studio Link for Administrators / Solution Designers */}
+          {(roles.includes("PLATFORM_ADMIN") || roles.includes("SOLUTION_DESIGNER")) && (
+            <div style={{ paddingTop: "var(--space-1)" }}>
+              <a
+                href="/studio/solutions"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "var(--space-2) var(--space-3)",
+                  fontSize: "var(--font-size-xs)",
+                  fontWeight: "var(--font-weight-semibold)",
+                  color: "var(--action-primary)",
+                  backgroundColor: "var(--action-secondary-bg)",
+                  border: "1px solid var(--border-default)",
+                  borderRadius: "var(--radius-md)",
+                  textDecoration: "none",
+                  textAlign: "center",
+                }}
+              >
+                Go to Design Studio →
+              </a>
+            </div>
+          )}
+
           <Divider />
 
           <Button
             type="button"
             variant="secondary"
+            isFullWidth
             isPending={isPending}
             pendingText={signOutPendingText}
             disabled={isPending}

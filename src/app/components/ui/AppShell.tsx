@@ -11,10 +11,12 @@ export const AppShell: React.FC<AppShellProps> = ({
   headerProps,
   children,
   style,
+  className,
   ...props
 }) => {
   return (
     <div
+      className={`ucs-app-shell app-shell ${className || ""}`.trim()}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -31,6 +33,7 @@ export const AppShell: React.FC<AppShellProps> = ({
 
       <main
         id="main-content"
+        className="ucs-app-shell-main app-shell-main"
         tabIndex={-1}
         style={{
           flex: "1 1 0%",

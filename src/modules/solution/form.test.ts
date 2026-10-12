@@ -58,20 +58,37 @@ describe("INC-03C5 Form Layout Management Test Suite", () => {
     defaultTabId = formAggregate.tabs[0].id;
   });
 
-  // --- 1. Initial Form Provisions & Reads ---
-  describe("Initial Form Read & Default Tab", () => {
-    it("proves 1 initial form, 1 default tab, 0 default sections are provisioned and readable", async () => {
-      const { formAggregate, solutionRevision } = await formService.getFormAggregate(
-        solutionA.id,
-        designerContext
-      );
-
-      expect(formAggregate.form.id).toBeDefined();
-      expect(formAggregate.tabs.length).toBe(1);
-      expect(formAggregate.tabs[0].title).toBe("Main");
-      expect(formAggregate.sections.length).toBe(0);
-      expect(formAggregate.fields.length).toBe(0);
+  // --- 1. Dual System Forms Provisions & Reads ---
+  describe("Dual System Forms Provisions & Reads", () => {
+    it("proves exactly two forms (Add Case and Case View) are provisioned, each with 1 Default Tab and 0 sections", async () => {
+      const { forms, solutionRevision } = await formService.listForms(solutionA.id, designerContext);
+      expect(forms).toHaveLength(2);
       expect(solutionRevision).toBe(1);
+
+      const addCaseForm = forms.find((f) => f.formType === "ADD_CASE");
+      const caseViewForm = forms.find((f) => f.formType === "CASE_VIEW");
+
+      expect(addCaseForm).toBeDefined();
+      expect(addCaseForm?.name).toBe("Add Case Form");
+      expect(addCaseForm?.formKey).toBe("add_case");
+
+      expect(caseViewForm).toBeDefined();
+      expect(caseViewForm?.name).toBe("Case View Form");
+      expect(caseViewForm?.formKey).toBe("case_view");
+
+      // Verify Add Case Form structure
+      const addCaseAggregate = await formService.getFormAggregate(solutionA.id, addCaseForm!.id, designerContext);
+      expect(addCaseAggregate.formAggregate.tabs).toHaveLength(1);
+      expect(addCaseAggregate.formAggregate.tabs[0].title).toBe("Default Tab");
+      expect(addCaseAggregate.formAggregate.sections).toHaveLength(0);
+      expect(addCaseAggregate.formAggregate.fields).toHaveLength(0);
+
+      // Verify Case View Form structure
+      const caseViewAggregate = await formService.getFormAggregate(solutionA.id, caseViewForm!.id, designerContext);
+      expect(caseViewAggregate.formAggregate.tabs).toHaveLength(1);
+      expect(caseViewAggregate.formAggregate.tabs[0].title).toBe("Default Tab");
+      expect(caseViewAggregate.formAggregate.sections).toHaveLength(0);
+      expect(caseViewAggregate.formAggregate.fields).toHaveLength(0);
     });
   });
 
@@ -260,6 +277,76 @@ describe("INC-03C5 Form Layout Management Test Suite", () => {
           solutionA.id,
           sec1.id,
           { expectedRevision: 4, propertyId: property.id, controlType: "TEXT_INPUT" },
+          designerContext
+        )
+      ).rejects.toThrow(ConflictError);
+    });
+
+    it("proves Property P may exist once in Add Case Form and once in Case View Form, but not twice in the same form", async () => {
+      const { forms } = await formService.listForms(solutionA.id, designerContext);
+      const addCaseForm = forms.find((f) => f.formType === "ADD_CASE")!;
+      const caseViewForm = forms.find((f) => f.formType === "CASE_VIEW")!;
+
+      const addCaseAggregate = await formService.getFormAggregate(solutionA.id, addCaseForm.id, designerContext);
+      const caseViewAggregate = await formService.getFormAggregate(solutionA.id, caseViewForm.id, designerContext);
+
+      const addCaseTabId = addCaseAggregate.formAggregate.tabs[0].id;
+      const caseViewTabId = caseViewAggregate.formAggregate.tabs[0].id;
+
+      const { section: addCaseSec } = await formService.createSection(
+        solutionA.id,
+        addCaseTabId,
+        { expectedRevision: 1, title: "Add Case Section", formId: addCaseForm.id },
+        designerContext
+      );
+
+      const { section: caseViewSec } = await formService.createSection(
+        solutionA.id,
+        caseViewTabId,
+        { expectedRevision: 2, title: "Case View Section", formId: caseViewForm.id },
+        designerContext
+      );
+
+      const { property } = await solutionPropertyService.createProperty(
+        solutionA.id,
+        { expectedRevision: 3, label: "Customer Phone", localSymbolicName: "cust_phone", storedDataType: "TEXT", formatPreset: "PHONE" },
+        designerContext
+      );
+
+      // Add to Add Case Form -> succeeds
+      const { fieldReference: ref1 } = await formService.addFieldReference(
+        solutionA.id,
+        addCaseSec.id,
+        { expectedRevision: 4, propertyId: property.id, controlType: "TEXT_INPUT", formId: addCaseForm.id },
+        designerContext
+      );
+      expect(ref1.id).toBeDefined();
+
+      // Add to Case View Form -> also succeeds! (Property P can exist in both forms)
+      const { fieldReference: ref2 } = await formService.addFieldReference(
+        solutionA.id,
+        caseViewSec.id,
+        { expectedRevision: 5, propertyId: property.id, controlType: "TEXT_INPUT", formId: caseViewForm.id },
+        designerContext
+      );
+      expect(ref2.id).toBeDefined();
+
+      // Attempt to add AGAIN to Add Case Form -> fails with 409 ConflictError
+      await expect(
+        formService.addFieldReference(
+          solutionA.id,
+          addCaseSec.id,
+          { expectedRevision: 6, propertyId: property.id, controlType: "TEXT_INPUT", formId: addCaseForm.id },
+          designerContext
+        )
+      ).rejects.toThrow(ConflictError);
+
+      // Attempt to add AGAIN to Case View Form -> fails with 409 ConflictError
+      await expect(
+        formService.addFieldReference(
+          solutionA.id,
+          caseViewSec.id,
+          { expectedRevision: 6, propertyId: property.id, controlType: "TEXT_INPUT", formId: caseViewForm.id },
           designerContext
         )
       ).rejects.toThrow(ConflictError);
@@ -558,4 +645,126 @@ describe("INC-03C5 Form Layout Management Test Suite", () => {
       ).rejects.toThrow(ConflictError);
     });
   });
+
+  // --- 6. Whole-Form Aggregate Persistence ---
+  describe("Whole-Form Aggregate Persistence (saveFormAggregate)", () => {
+    it("synchronizes tabs, sections, and fields in dependency-safe order and increments revision", async () => {
+      const { forms } = await formService.listForms(solutionA.id, designerContext);
+      const addCaseForm = forms.find((f) => f.formType === "ADD_CASE")!;
+
+      const { property: p1 } = await solutionPropertyService.createProperty(
+        solutionA.id,
+        { expectedRevision: 1, label: "Full Name", localSymbolicName: "full_name", storedDataType: "TEXT" },
+        designerContext
+      );
+      const { property: p2 } = await solutionPropertyService.createProperty(
+        solutionA.id,
+        { expectedRevision: 2, label: "Comments", localSymbolicName: "comments", storedDataType: "TEXT" },
+        designerContext
+      );
+
+      // Save a complete aggregate with 2 tabs, 2 sections, 2 fields
+      const { formAggregate, solutionRevision } = await formService.saveFormAggregate(
+        solutionA.id,
+        addCaseForm.id,
+        {
+          expectedRevision: 3,
+          tabs: [
+            { id: "draft-tab-1", title: "General Info" },
+            { id: "draft-tab-2", title: "Additional Info" },
+          ],
+          sections: [
+            { id: "draft-sec-1", tabId: "draft-tab-1", title: "Identity" },
+            { id: "draft-sec-2", tabId: "draft-tab-2", title: "Remarks" },
+          ],
+          fields: [
+            { id: "draft-f-1", sectionId: "draft-sec-1", propertyId: p1.id, controlType: "TEXT_INPUT", isRequired: true },
+            { id: "draft-f-2", sectionId: "draft-sec-2", propertyId: p2.id, controlType: "TEXTAREA", isRequired: false },
+          ],
+        },
+        designerContext
+      );
+
+      expect(solutionRevision).toBe(4);
+      expect(formAggregate.tabs).toHaveLength(2);
+      expect(formAggregate.tabs[0].title).toBe("General Info");
+      expect(formAggregate.tabs[1].title).toBe("Additional Info");
+      expect(formAggregate.sections).toHaveLength(2);
+      expect(formAggregate.fields).toHaveLength(2);
+
+      // Now save an update that renames, removes a tab, a section, and a field (testing child-first deletion)
+      const tab1Id = formAggregate.tabs[0].id;
+      const sec1Id = formAggregate.sections[0].id;
+      const field1Id = formAggregate.fields[0].id;
+
+      const { formAggregate: updatedAgg, solutionRevision: rev5 } = await formService.saveFormAggregate(
+        solutionA.id,
+        addCaseForm.id,
+        {
+          expectedRevision: 4,
+          tabs: [{ id: tab1Id, title: "Primary Details" }],
+          sections: [{ id: sec1Id, tabId: tab1Id, title: "Basic Info" }],
+          fields: [{ id: field1Id, sectionId: sec1Id, propertyId: p1.id, controlType: "TEXT_INPUT", isRequired: false }],
+        },
+        designerContext
+      );
+
+      expect(rev5).toBe(5);
+      expect(updatedAgg.tabs).toHaveLength(1);
+      expect(updatedAgg.tabs[0].title).toBe("Primary Details");
+      expect(updatedAgg.sections).toHaveLength(1);
+      expect(updatedAgg.fields).toHaveLength(1);
+      expect(updatedAgg.fields[0].isRequired).toBe(false);
+    });
+
+    it("rejects empty tab list (must have at least one tab)", async () => {
+      const { forms } = await formService.listForms(solutionA.id, designerContext);
+      const addCaseForm = forms.find((f) => f.formType === "ADD_CASE")!;
+
+      await expect(
+        formService.saveFormAggregate(
+          solutionA.id,
+          addCaseForm.id,
+          {
+            expectedRevision: 1,
+            tabs: [],
+            sections: [],
+            fields: [],
+          },
+          designerContext
+        )
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("rejects unowned property IDs and cross-solution property IDs", async () => {
+      const { forms } = await formService.listForms(solutionA.id, designerContext);
+      const addCaseForm = forms.find((f) => f.formType === "ADD_CASE")!;
+
+      // Cross-solution property created in solutionB
+      const solB = await solutionService.createSolution(
+        { name: "Other Solution", solutionPrefix: "OTH" },
+        designerContext
+      );
+      const { property: propB } = await solutionPropertyService.createProperty(
+        solB.id,
+        { expectedRevision: 1, label: "Foreign Prop", localSymbolicName: "foreign_prop", storedDataType: "TEXT" },
+        designerContext
+      );
+
+      await expect(
+        formService.saveFormAggregate(
+          solutionA.id,
+          addCaseForm.id,
+          {
+            expectedRevision: 1,
+            tabs: [{ id: "t1", title: "Tab 1" }],
+            sections: [{ id: "s1", tabId: "t1", title: "Sec 1" }],
+            fields: [{ id: "f1", sectionId: "s1", propertyId: propB.id, controlType: "TEXT_INPUT", isRequired: false }],
+          },
+          designerContext
+        )
+      ).rejects.toThrow(ValidationError);
+    });
+  });
 });
+

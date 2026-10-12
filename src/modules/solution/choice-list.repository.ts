@@ -4,6 +4,7 @@ import {
   solutions,
   choiceLists,
   choiceOptions,
+  solutionProperties,
 } from "../../infrastructure/db/schema";
 import { DbTransaction } from "./solution.repository";
 
@@ -281,6 +282,37 @@ export class ChoiceListRepository {
   }
 
   /**
+   * Finds a single option by key for a choice list.
+   */
+  async findOptionByKey(
+    key: string,
+    choiceListId: string
+  ): Promise<ChoiceOptionRow | null> {
+    const db = getDb();
+    const [row] = await db
+      .select({
+        id: choiceOptions.id,
+        choiceListId: choiceOptions.choiceListId,
+        key: choiceOptions.key,
+        label: choiceOptions.label,
+        displayOrder: choiceOptions.displayOrder,
+        isActive: choiceOptions.isActive,
+        createdAt: choiceOptions.createdAt,
+        updatedAt: choiceOptions.updatedAt,
+      })
+      .from(choiceOptions)
+      .where(
+        and(
+          eq(choiceOptions.key, key),
+          eq(choiceOptions.choiceListId, choiceListId)
+        )
+      )
+      .limit(1);
+
+    return row || null;
+  }
+
+  /**
    * Deactivates a choice option record (isActive = false) within a transaction.
    */
   async deactivateOptionInTx(
@@ -293,6 +325,32 @@ export class ChoiceListRepository {
       .update(choiceOptions)
       .set({
         isActive: false,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(choiceOptions.id, optionId),
+          eq(choiceOptions.choiceListId, choiceListId)
+        )
+      )
+      .returning();
+
+    return updatedRow || null;
+  }
+
+  /**
+   * Reactivates a choice option record (isActive = true) within a transaction.
+   */
+  async reactivateOptionInTx(
+    tx: DbTransaction,
+    optionId: string,
+    choiceListId: string
+  ): Promise<ChoiceOptionRow | null> {
+    const now = new Date();
+    const [updatedRow] = await tx
+      .update(choiceOptions)
+      .set({
+        isActive: true,
         updatedAt: now,
       })
       .where(
@@ -354,6 +412,39 @@ export class ChoiceListRepository {
     }
 
     return this.listOptionsByChoiceList(choiceListId, tx);
+  }
+
+  async findDependentProperties(
+    choiceListId: string
+  ): Promise<{ id: string; label: string }[]> {
+    const db = getDb();
+    const rows = await db
+      .select({
+        id: solutionProperties.id,
+        label: solutionProperties.label,
+      })
+      .from(solutionProperties)
+      .where(eq(solutionProperties.choiceListId, choiceListId));
+
+    return rows;
+  }
+
+  async deleteChoiceListInTx(
+    tx: DbTransaction,
+    choiceListId: string,
+    solutionId: string
+  ): Promise<boolean> {
+    const res = await tx
+      .delete(choiceLists)
+      .where(
+        and(
+          eq(choiceLists.id, choiceListId),
+          eq(choiceLists.solutionId, solutionId)
+        )
+      )
+      .returning({ id: choiceLists.id });
+
+    return res.length > 0;
   }
 }
 

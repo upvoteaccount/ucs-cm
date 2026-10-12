@@ -16,30 +16,29 @@ Solutions Home (`/studio/solutions`) → Overview → Data → Form.
 - **Create Solution Modal/Screen**: Captures Solution Name, Description, and an editable suggested Solution Prefix. The Solution Prefix (`solution_prefix`, e.g. `CDD`) is auto-suggested from Solution Name, normalized to uppercase, validated for active-organisation uniqueness, and serves as the primary prefix for generated technical property names (e.g. `CDD_customer_name`), while also being available for case number formatting (e.g. `CDD-KYC-000001`). Solution `key` is unified with or derived from `solution_prefix`.
 - **Active Studio Navigation**: Shows ONLY implemented active areas (Overview, Data, Form). Deferred Studio areas (Roles, Workflow, Document Types, Publishing) are not rendered as disabled navigation items.
 
-## One-Place Field Inspector Split Model
-When selecting a form field reference in Form Studio, the inspector panel exposes BOTH configuration tiers in a single inspector view without requiring the user to navigate back to the Data area for ordinary field changes:
+## One-Place Field Inspector & Shared Form Structure
+When selecting a form field reference in Form Studio, the inspector panel exposes BOTH configuration tiers:
 - **Canonical Data Dictionary Tier ("Applies everywhere")**: Stored data type, label, format preset (`EMAIL`, `PHONE`), choice list binding, default value, help text, minimum/maximum length or range constraints, pattern/regex validation rules.
-- **Form Reference Tier ("This form only")**: Form layout placement (tab, section), display ordering sequence, static visibility (`visible`), static enablement (`enabled`), static editability (`editable`), and static required state (`required`).
+- **Form Reference Tier ("Base Form Structure & Queue Rules")**: Form layout placement (tab, section), display ordering sequence, base control type, and queue-context field rules (defining static visibility (`visible`/`hidden`), editability (`editable`/`read-only`), and requirement state (`mandatory`/`optional`) per work context/queue without duplicating forms).
 
 ## Studio Access Control & Landing Navigation
 - Possession of `PLATFORM_ADMIN` or `SOLUTION_DESIGNER` platform roles grants access to the INC-03 Studio landing at `/studio/solutions`.
 - Direct access to `/studio` by runtime-only users (without a design role) results in server-side denial with the existing approved forbidden experience (`/forbidden`).
 - Post-login `/landing` evaluates user roles, leaving runtime-only users on the neutral authenticated destination (`/landing`). Top-navigation application switcher is deferred.
 
-## Runtime Portal
-My Work, Create Case, Search Cases, Recently Viewed, Notifications.
+## Navigator & In Baskets Navigation
+- **Solution Entry**: Opening a Solution presents a clean work entry point displaying accessible In Baskets, Case Search, and Create Case (where permitted). Opening a Solution does NOT automatically open the last-used queue.
+- **In Baskets**: In Baskets display WIDs in a queue. Navigator shows only In Baskets for queues the logged-in user can access.
+- **Workspace Tabs**: Opening a WID from an In Basket opens the WID processing page. Multiple WIDs can remain open concurrently in workspace tabs.
+- **Case Search vs. WID Editing**: Case Search opens Case Details in read-only mode. Editing business data occurs strictly through an active WID processing page, not through Case Search.
 
-## My Work
-Cards for Claimed Tasks, Available Queue Tasks, Due Soon, Overdue, Recently Completed. Task table shows task, case, priority, queue, status, due date, claimant, actions.
-
-## Case Creation
-Select solution, complete generated form, upload required documents, review, submit, show generated case number. Errors appear inline and in a page summary without clearing entered values.
-
-## Case Workspace
-Header: case number, type, status, priority, stage, dates, creator. Sections: Case Details, Current Task, Documents, Comments, Audit Timeline.
-
-## Documents
-Desktop split view with grid and viewer. Smaller screens open viewer full-screen.
+## Standard System-Defined WID Processing Page
+Phase 1 uses a single system-defined default WID processing page layout (no configurable Page Designer or per-step page templates):
+- **Toolbar at top**: Actions (Send, Claim, Release, Approve, Reject, etc.)
+- **Document Viewer on left**: First-class Document Viewer component
+- **Shared Form/View on right**: Displays business data using the shared Form structure evaluated against the current queue-context field rules
+- **Document List below Form/View**: Document management grid
+The Form represents strictly the business-data portion of the WID processing page, not the entire page layout.
 
 ## Confirmations
 Required for publish, completion, approve, reject, send back, release, reassignment, replace, delete, user deactivation.

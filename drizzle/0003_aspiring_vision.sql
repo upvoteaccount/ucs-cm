@@ -1,0 +1,2 @@
+ALTER TABLE "solution_properties" ADD COLUMN "default_control_type" varchar(32);--> statement-breakpoint
+ALTER TABLE "solution_properties" ADD CONSTRAINT "chk_prop_default_control_type" CHECK (default_control_type IS NULL OR default_control_type IN ('TEXT_INPUT', 'TEXTAREA', 'NUMBER_INPUT', 'DATE_PICKER', 'DATETIME_PICKER', 'CHECKBOX', 'YES_NO', 'DROPDOWN', 'RADIO', 'MULTI_SELECT_DROPDOWN', 'CHECKBOXES'));

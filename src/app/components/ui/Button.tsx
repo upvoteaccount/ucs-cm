@@ -5,6 +5,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   variant?: "primary" | "secondary" | "ghost";
   isPending?: boolean;
   pendingText?: string;
+  isFullWidth?: boolean;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
@@ -14,6 +15,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
   pendingText,
   disabled = false,
   type = "button",
+  isFullWidth = false,
   style,
   ...props
 }, ref) => {
@@ -32,7 +34,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
     border: "1px solid transparent",
     cursor: isDisabled ? "not-allowed" : "pointer",
     transition: "background-color var(--transition-speed), border-color var(--transition-speed)",
-    width: "100%",
+    width: isFullWidth ? "100%" : undefined,
   };
 
   const variantStyles: Record<string, React.CSSProperties> = {

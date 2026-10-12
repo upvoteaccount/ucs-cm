@@ -11,3 +11,5 @@ export * from "./property-validation.types";
 export * from "./regex-presets";
 export * from "./regex-safety";
 export * from "./property-validation.service";
+export * from "./queue.repository";
+export * from "./queue.service";

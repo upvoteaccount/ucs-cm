@@ -15,12 +15,12 @@ This document defines how solution configurations created in the Design Studio a
 ### Key Architectural Constraints
 1. **Solution Aggregate Ownership**: The Solution application entity directly owns Data Dictionary properties, solution-owned Choice Lists, and Form layouts. The Case Type layer is eliminated in Phase 1.
 2. **Approved Property Identity Contract**:
-   - Local symbolic name entered as lowercase `snake_case` (e.g. `customer_name`).
-   - Solution prefix owned by Solution aggregate (e.g. `CDD`).
-   - Generated read-only technical property name: `<PREFIX>_<LOCAL_SYMBOLIC_NAME>` (e.g. `CDD_customer_name`), containing exactly one underscore separator.
+   - Local symbolic name entered as lowercase or uppercase, normalized to canonical uppercase `SNAKE_CASE` (e.g. `FIRST_NAME`).
+   - Solution Prefix: Uppercase prefix owned by Solution aggregate (e.g. `CDD`).
+   - Generated read-only technical property name: `<PREFIX>_<LOCAL_SYMBOLIC_NAME>` (e.g. `CDD_FIRST_NAME`), containing exactly one underscore separator.
    - Symbolic rules: alphabetic start, alphanumeric/underscore characters, <=64 chars, reserved name/char rejection, uniqueness within Solution.
    - Mutability: Local symbolic name and data type are mutable ONLY while draft and unused within the solution layout.
-3. **Choice-List Selection Cardinality Unresolved**: Choice-list selection cardinality ownership (whether single-select vs multi-select cardinality is specified on the Choice List definition or on the Property/Control binding) is recorded as UNRESOLVED and explicitly deferred to INC-03B design without structurally implying an answer.
+3. **Choice-List Selection Cardinality Resolved**: Choice-list selection cardinality belongs to the Property definition (`SINGLE` or `MULTIPLE`). `SINGLE` cardinality permits `DROPDOWN` or `RADIO` controls. `MULTIPLE` cardinality permits `MULTI_SELECT_DROPDOWN` or `CHECKBOXES` controls.
 4. **Draft Workspace & Optimistic Concurrency**: All metadata configuration changes take place within a Draft solution workspace governed by an optimistic concurrency counter (`expectedRevision` returning HTTP 409 Conflict with clear error message and reload option on stale updates; no automatic merge or silent overwrite; failed updates change nothing in database and produce no audit events; exact revision boundary model is recorded as an INC-03B implementation decision).
 5. **Deferred Publishing Engine**: Solution publishing engine and immutable snapshot compilation are deferred to a later authorised publishing increment (INC-05). INC-03 delivers Draft Solution Data Dictionary and Form Studio configuration.
 

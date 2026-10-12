@@ -18,7 +18,7 @@
 | **RISK-014** | Concurrency | Stale revision overwrite during concurrent Studio metadata editing | Enforce optimistic `expectedRevision` check returning HTTP 409 Conflict with clear reload message | Core Dev Team | Active |
 | **RISK-015** | Data Isolation | Multi-tenant leakage via request-body organisation ID spoofing or foreign-tenant disclosure | Trusted session active-organisation context scoping; prohibited request-body org ID authority; 404 response on foreign lookups | Core Dev Team | Active |
 | **RISK-016** | Metadata | Invalid data-type and control combination in Data Dictionary | Authoritative backend validation engine enforcing type-control compatibility matrix | Core Dev Team | Active |
-| **RISK-017** | Metadata | Choice-list selection cardinality specification ambiguity | Choice-list selection cardinality ownership recorded as unresolved for INC-03B design | Architecture Team | Active |
+| **RISK-017** | Metadata | Choice-list selection cardinality specification ambiguity | Choice-list selection cardinality ownership resolved: Cardinality belongs to Property (`SINGLE`/`MULTIPLE`). | Architecture Team | Closed |
 | **RISK-018** | Security | Global entity lookup followed by tenant check revealing foreign record existence | Enforce active organisation context filter directly within initial SQL query criteria | Core Dev Team | Active |
 | **DEP-001** | Database | PostgreSQL 16 server dependency | Docker containerization with internal networking | DevOps | Active |
 | **DEP-002** | Storage | Local filesystem driver abstraction for Phase 1 document storage | Standardized `StorageService` interface with S3 stretch compatibility contract | Core Dev Team | Active |

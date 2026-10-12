@@ -121,3 +121,129 @@ a {
     scroll-behavior: auto !important;
   }
 }
+
+/* Runtime Wide Viewport Layout Rules (~24px to 32px horizontal padding, full available width) */
+.ucs-app-shell-main:has(.ucs-runtime-container) {
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: var(--space-5) var(--space-8) !important;
+}
+
+.ucs-runtime-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+}
+
+/* WID Processing Viewport-Fit: Single owner of viewport subtraction */
+html:has([data-testid="wid-processing-container"]),
+body:has([data-testid="wid-processing-container"]) {
+  height: 100% !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  overflow: hidden !important;
+}
+
+/* AppShell: Single owner of viewport subtraction using CSS Grid */
+.ucs-app-shell:has([data-testid="wid-processing-container"]),
+.app-shell:has([data-testid="wid-processing-container"]),
+div:has(> .ucs-app-shell-main:has([data-testid="wid-processing-container"])) {
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  overflow: hidden !important;
+}
+
+/* AppShell Main: consumes remaining viewport height (row 2: minmax(0, 1fr)) */
+.ucs-app-shell-main:has([data-testid="wid-processing-container"]),
+.app-shell-main:has([data-testid="wid-processing-container"]) {
+  height: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  padding: var(--space-4) var(--space-6) !important;
+  margin: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* WID Processing Container: 100% of AppShell main */
+.wid-processing-container {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  row-gap: var(--space-3);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.wid-toolbar {
+  flex-shrink: 0;
+}
+
+/* Workspace: fills remaining height of processing container (row 2) */
+.wid-workspace {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.wid-workspace-grid {
+  display: grid;
+  grid-template-columns: 42% minmax(0, calc(58% - var(--space-4)));
+  gap: var(--space-4);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.wid-viewer-panel {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.wid-right-panel {
+  display: grid;
+  grid-template-rows: minmax(0, 58%) minmax(0, 42%);
+  gap: var(--space-3);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.case-form-region {
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.case-support-region {
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.documents-history-content {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+

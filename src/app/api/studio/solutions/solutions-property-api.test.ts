@@ -3,6 +3,7 @@ import { getDb } from "@/infrastructure/db/client";
 import {
   auditEvents,
   platformRoles,
+  solutionProperties,
 } from "@/infrastructure/db/schema";
 import { solutionService, solutionPropertyService } from "@/modules/solution/index";
 import { adminService } from "@/modules/organisation/index";
@@ -84,7 +85,7 @@ describe("INC-03C3 Solution Properties API Integration Test Suite", () => {
     expect(resPost.status).toBe(201);
     const jsonPost = await resPost.json();
     expect(jsonPost.property.id).toBeDefined();
-    expect(jsonPost.property.generatedTechnicalName).toBe("PROP_risk_rating");
+    expect(jsonPost.property.generatedTechnicalName).toBe("PROP_RISK_RATING");
     expect(jsonPost.solutionRevision).toBe(2);
 
     const reqGet = new NextRequest(`http://localhost:3000/api/studio/solutions/${solutionId}/properties`, {
@@ -119,7 +120,7 @@ describe("INC-03C3 Solution Properties API Integration Test Suite", () => {
     const getJson = await getRes.json();
     expect(getJson.property.label).toBe("Amount Limit");
 
-    // PATCH update
+    // PATCH update defaultControlType to RADIO (SINGLE)
     const patchReq = new NextRequest(`http://localhost:3000/api/studio/solutions/${solutionId}/properties/${property.id}`, {
       method: "PATCH",
       headers: {
@@ -129,13 +130,32 @@ describe("INC-03C3 Solution Properties API Integration Test Suite", () => {
       body: JSON.stringify({
         expectedRevision: 2,
         label: "Updated Amount Limit",
+        defaultControlType: "RADIO",
       }),
     });
     const patchRes = await patchPropertyDetailHandler(patchReq, { params: Promise.resolve({ id: solutionId, propertyId: property.id }) });
     expect(patchRes.status).toBe(200);
     const patchJson = await patchRes.json();
     expect(patchJson.property.label).toBe("Updated Amount Limit");
+    expect(patchJson.property.defaultControlType).toBe("RADIO");
     expect(patchJson.solutionRevision).toBe(3);
+
+    // Verify DB level value
+    const db = getDb();
+    const [dbProp] = await db
+      .select()
+      .from(solutionProperties)
+      .where(eq(solutionProperties.id, property.id));
+    expect(dbProp.defaultControlType).toBe("RADIO");
+
+    // GET detail after update
+    const getReq2 = new NextRequest(`http://localhost:3000/api/studio/solutions/${solutionId}/properties/${property.id}`, {
+      headers: { authorization: `Bearer ${designerSessionToken}` },
+    });
+    const getRes2 = await getPropertyDetailHandler(getReq2, { params: Promise.resolve({ id: solutionId, propertyId: property.id }) });
+    expect(getRes2.status).toBe(200);
+    const getJson2 = await getRes2.json();
+    expect(getJson2.property.defaultControlType).toBe("RADIO");
 
     // DELETE property
     const delReq = new NextRequest(`http://localhost:3000/api/studio/solutions/${solutionId}/properties/${property.id}`, {

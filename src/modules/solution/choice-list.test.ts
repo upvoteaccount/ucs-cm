@@ -69,7 +69,7 @@ describe("INC-03C4 Choice List & Ordered Option Test Suite", () => {
       );
 
       expect(choiceList.id).toBeDefined();
-      expect(choiceList.key).toBe("risk_levels");
+      expect(choiceList.key).toBe("RMA_LIST_RISK_LEVELS");
       expect(solutionRevision).toBe(2);
 
       // Verify CHOICE_LIST_CREATED audit event in DB
@@ -276,6 +276,40 @@ describe("INC-03C4 Choice List & Ordered Option Test Suite", () => {
         .where(and(eq(auditEvents.entityId, opt.id), eq(auditEvents.eventType, "CHOICE_OPTION_DEACTIVATED")));
 
       expect(auditsAfter.length).toBe(1); // No new audit event written
+
+      // Attempt to create another option with same key ('emea') -> blocked with guidance
+      await expect(
+        choiceListService.createOption(
+          solutionA.id,
+          choiceList.id,
+          { expectedRevision: 4, key: "emea", label: "EMEA Region" },
+          designerContext
+        )
+      ).rejects.toThrow("An inactive option with this value already exists. Reactivate it instead.");
+
+      // Reactivate option -> restores same option record, preserving key/ID/label/displayOrder
+      const { option: reactivated, solutionRevision: reactRev } = await choiceListService.reactivateOption(
+        solutionA.id,
+        choiceList.id,
+        opt.id,
+        { expectedRevision: 4 },
+        designerContext
+      );
+
+      expect(reactivated.id).toBe(opt.id);
+      expect(reactivated.key).toBe("emea");
+      expect(reactivated.label).toBe("EMEA Region");
+      expect(reactivated.displayOrder).toBe(1);
+      expect(reactivated.isActive).toBe(true);
+      expect(reactRev).toBe(5);
+
+      // Verify CHOICE_OPTION_REACTIVATED audit event in DB
+      const reactAudits = await db
+        .select()
+        .from(auditEvents)
+        .where(and(eq(auditEvents.entityId, opt.id), eq(auditEvents.eventType, "CHOICE_OPTION_REACTIVATED")));
+
+      expect(reactAudits.length).toBe(1);
     });
 
     it("succeeds reordering when existing display orders already exceed 10000", async () => {
@@ -365,6 +399,89 @@ describe("INC-03C4 Choice List & Ordered Option Test Suite", () => {
       await expect(
         choiceListService.getChoiceListById(solutionA.id, choiceList.id, orgBLogin.context)
       ).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  // --- 5. End-to-End Choice Set Lifecycle Workflow ---
+  describe("End-to-End Choice Set Lifecycle Workflow", () => {
+    it("orchestrates create, add options, reload, rename, reorder, deactivate and verifies final state persistence", async () => {
+      let rev = 1;
+
+      // 1. Create Choice List "Existing Loans"
+      const { choiceList, solutionRevision: rev1 } = await choiceListService.createChoiceList(
+        solutionA.id,
+        { expectedRevision: rev, key: "existing_loans", name: "Existing Loans", description: "Loan types" },
+        designerContext
+      );
+      expect(choiceList.id).toBeDefined();
+      expect(rev1).toBe(2);
+      rev = rev1;
+
+      // 2. Add options: Car, Home Loan, Personal Loan
+      const { option: optCar, solutionRevision: revCar } = await choiceListService.createOption(
+        solutionA.id,
+        choiceList.id,
+        { expectedRevision: rev, key: "car", label: "Car" },
+        designerContext
+      );
+      rev = revCar;
+
+      const { option: optHome, solutionRevision: revHome } = await choiceListService.createOption(
+        solutionA.id,
+        choiceList.id,
+        { expectedRevision: rev, key: "home_loan", label: "Home Loan" },
+        designerContext
+      );
+      rev = revHome;
+
+      const { option: optPersonal, solutionRevision: revPersonal } = await choiceListService.createOption(
+        solutionA.id,
+        choiceList.id,
+        { expectedRevision: rev, key: "personal_loan", label: "Personal Loan" },
+        designerContext
+      );
+      rev = revPersonal;
+
+      // 3. Reload & verify all 3 options present
+      let reloaded = await choiceListService.getChoiceListById(solutionA.id, choiceList.id, designerContext);
+      expect(reloaded.options.length).toBe(3);
+      expect(reloaded.options.map((o) => o.label)).toEqual(["Car", "Home Loan", "Personal Loan"]);
+
+      // 4. Rename Home Loan -> Housing Loan
+      const { solutionRevision: revRename } = await choiceListService.updateOption(
+        solutionA.id,
+        choiceList.id,
+        optHome.id,
+        { expectedRevision: rev, label: "Housing Loan" },
+        designerContext
+      );
+      rev = revRename;
+
+      // 5. Reorder options: [Personal Loan, Housing Loan, Car]
+      const { solutionRevision: revReorder } = await choiceListService.reorderOptions(
+        solutionA.id,
+        choiceList.id,
+        { expectedRevision: rev, optionIds: [optPersonal.id, optHome.id, optCar.id] },
+        designerContext
+      );
+      rev = revReorder;
+
+      // 6. Deactivate one option (Car)
+      const { solutionRevision: revDeact } = await choiceListService.deactivateOption(
+        solutionA.id,
+        choiceList.id,
+        optCar.id,
+        { expectedRevision: rev },
+        designerContext
+      );
+      rev = revDeact;
+
+      // 7. Reload & verify final state persists
+      reloaded = await choiceListService.getChoiceListById(solutionA.id, choiceList.id, designerContext);
+      expect(reloaded.options.length).toBe(3);
+      const activeOptions = reloaded.options.filter((o) => o.isActive);
+      expect(activeOptions.length).toBe(2);
+      expect(activeOptions.map((o) => o.label)).toEqual(["Personal Loan", "Housing Loan"]);
     });
   });
 });

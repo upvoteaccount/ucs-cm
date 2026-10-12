@@ -6,14 +6,18 @@ import {
   formTabs,
   formSections,
   formFieldReferences,
+  formFieldQueueRules,
 } from "../../infrastructure/db/schema";
 import { DbTransaction } from "./solution.repository";
 
 export interface FormRow {
   id: string;
   solutionId: string;
+  formType: string;
+  formKey: string;
   key: string;
   name: string;
+  description: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,29 +59,46 @@ export interface FormFieldRefRow {
   updatedAt: Date;
 }
 
+export interface FormFieldQueueRuleRow {
+  id: string;
+  solutionId: string;
+  formId: string;
+  fieldReferenceId: string;
+  queueId: string;
+  isVisible: boolean;
+  isEditable: boolean;
+  isRequired: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface FormAggregate {
   form: FormRow;
   tabs: FormTabRow[];
   sections: FormSectionRow[];
   fields: FormFieldRefRow[];
+  queueRules: FormFieldQueueRuleRow[];
 }
 
 export class FormRepository {
   /**
-   * Reads the single initial Form by Solution ID scoped strictly to active organisation.
+   * Lists all forms for a Solution scoped to active organisation.
    */
-  async findInitialFormBySolution(
+  async listFormsBySolution(
     solutionId: string,
     organisationId: string,
     tx?: DbTransaction
-  ): Promise<FormRow | null> {
+  ): Promise<FormRow[]> {
     const client = tx || getDb();
-    const [row] = await client
+    const rows = await client
       .select({
         id: solutionForms.id,
         solutionId: solutionForms.solutionId,
+        formType: solutionForms.formType,
+        formKey: solutionForms.formKey,
         key: solutionForms.formKey,
         name: solutionForms.name,
+        description: solutionForms.description,
         createdAt: solutionForms.createdAt,
         updatedAt: solutionForms.updatedAt,
       })
@@ -89,9 +110,101 @@ export class FormRepository {
           eq(solutions.organisationId, organisationId)
         )
       )
+      .orderBy(asc(solutionForms.createdAt));
+
+    // Deterministic ordering: ADD_CASE first, CASE_VIEW second, others by createdAt
+    return rows.sort((a, b) => {
+      const rank = (type: string) => (type === "ADD_CASE" ? 1 : type === "CASE_VIEW" ? 2 : 3);
+      return rank(a.formType) - rank(b.formType);
+    });
+  }
+
+  /**
+   * Finds a specific Form by ID and Solution ID scoped strictly to active organisation.
+   */
+  async findFormById(
+    formId: string,
+    solutionId: string,
+    organisationId: string,
+    tx?: DbTransaction
+  ): Promise<FormRow | null> {
+    const client = tx || getDb();
+    const [row] = await client
+      .select({
+        id: solutionForms.id,
+        solutionId: solutionForms.solutionId,
+        formType: solutionForms.formType,
+        formKey: solutionForms.formKey,
+        key: solutionForms.formKey,
+        name: solutionForms.name,
+        description: solutionForms.description,
+        createdAt: solutionForms.createdAt,
+        updatedAt: solutionForms.updatedAt,
+      })
+      .from(solutionForms)
+      .innerJoin(solutions, eq(solutionForms.solutionId, solutions.id))
+      .where(
+        and(
+          eq(solutionForms.id, formId),
+          eq(solutionForms.solutionId, solutionId),
+          eq(solutions.organisationId, organisationId)
+        )
+      )
       .limit(1);
 
     return row || null;
+  }
+
+  /**
+   * Finds a Form by formType (e.g. 'ADD_CASE' or 'CASE_VIEW') for a Solution.
+   */
+  async findFormByType(
+    formType: string,
+    solutionId: string,
+    organisationId: string,
+    tx?: DbTransaction
+  ): Promise<FormRow | null> {
+    const client = tx || getDb();
+    const [row] = await client
+      .select({
+        id: solutionForms.id,
+        solutionId: solutionForms.solutionId,
+        formType: solutionForms.formType,
+        formKey: solutionForms.formKey,
+        key: solutionForms.formKey,
+        name: solutionForms.name,
+        description: solutionForms.description,
+        createdAt: solutionForms.createdAt,
+        updatedAt: solutionForms.updatedAt,
+      })
+      .from(solutionForms)
+      .innerJoin(solutions, eq(solutionForms.solutionId, solutions.id))
+      .where(
+        and(
+          eq(solutionForms.formType, formType),
+          eq(solutionForms.solutionId, solutionId),
+          eq(solutions.organisationId, organisationId)
+        )
+      )
+      .limit(1);
+
+    return row || null;
+  }
+
+  /**
+   * Reads the single initial Form by Solution ID scoped strictly to active organisation.
+   * Backward-compatible fallback: returns CASE_VIEW form or first available form.
+   */
+  async findInitialFormBySolution(
+    solutionId: string,
+    organisationId: string,
+    tx?: DbTransaction
+  ): Promise<FormRow | null> {
+    const caseView = await this.findFormByType("CASE_VIEW", solutionId, organisationId, tx);
+    if (caseView) return caseView;
+
+    const all = await this.listFormsBySolution(solutionId, organisationId, tx);
+    return all[0] || null;
   }
 
   /**
@@ -103,10 +216,16 @@ export class FormRepository {
   async getFormAggregate(
     solutionId: string,
     organisationId: string,
+    formId?: string,
     tx?: DbTransaction
   ): Promise<FormAggregate | null> {
     const client = tx || getDb();
-    const form = await this.findInitialFormBySolution(solutionId, organisationId, tx);
+    let form: FormRow | null = null;
+    if (formId) {
+      form = await this.findFormById(formId, solutionId, organisationId, tx);
+    } else {
+      form = await this.findInitialFormBySolution(solutionId, organisationId, tx);
+    }
     if (!form) return null;
 
     const rawTabs = await client
@@ -174,7 +293,24 @@ export class FormRepository {
       updatedAt: f.updatedAt,
     }));
 
-    return { form, tabs: rawTabs, sections: rawSections, fields };
+    const rawQueueRules = await client
+      .select({
+        id: formFieldQueueRules.id,
+        solutionId: formFieldQueueRules.solutionId,
+        formId: formFieldQueueRules.formId,
+        fieldReferenceId: formFieldQueueRules.fieldReferenceId,
+        queueId: formFieldQueueRules.queueId,
+        isVisible: formFieldQueueRules.isVisible,
+        isEditable: formFieldQueueRules.isEditable,
+        isRequired: formFieldQueueRules.isRequired,
+        createdAt: formFieldQueueRules.createdAt,
+        updatedAt: formFieldQueueRules.updatedAt,
+      })
+      .from(formFieldQueueRules)
+      .where(eq(formFieldQueueRules.formId, form.id))
+      .orderBy(asc(formFieldQueueRules.createdAt), asc(formFieldQueueRules.id));
+
+    return { form, tabs: rawTabs, sections: rawSections, fields, queueRules: rawQueueRules };
   }
 
   // --- TAB METHODS ---
@@ -715,6 +851,321 @@ export class FormRepository {
       createdAt: raw.createdAt,
       updatedAt: raw.updatedAt,
     };
+  }
+
+  /**
+   * Atomically synchronizes a full Form draft aggregate in a dependency-safe manner:
+   * 1. Deletions (Child-first): Fields -> Sections -> Tabs
+   * 2. Upserts/Inserts (Parent-first): Tabs -> Sections -> Fields
+   */
+  async saveFormAggregateInTx(
+    tx: DbTransaction,
+    solutionId: string,
+    organisationId: string,
+    formId: string,
+    draft: {
+      tabs: { id?: string; key?: string; title: string; displayOrder?: number }[];
+      sections: { id?: string; tabId: string; key?: string; title: string; displayOrder?: number }[];
+      fields: {
+        id?: string;
+        sectionId: string;
+        propertyId: string;
+        controlType: string;
+        isVisible?: boolean;
+        isEditable?: boolean;
+        isRequired?: boolean;
+        displayOrder?: number;
+      }[];
+      queueRules?: {
+        fieldReferenceId: string;
+        queueId: string;
+        isVisible?: boolean;
+        isEditable?: boolean;
+        isRequired?: boolean;
+      }[];
+    }
+  ): Promise<FormAggregate> {
+    const now = new Date();
+
+    // 0. Fetch form type to determine static vs per-queue behavior semantics
+    const [formRecord] = await tx
+      .select({ id: solutionForms.id, formType: solutionForms.formType })
+      .from(solutionForms)
+      .where(eq(solutionForms.id, formId))
+      .limit(1);
+    const isAddCase = formRecord?.formType === "ADD_CASE";
+
+    // 1. Fetch current baseline state for scoping and diffing
+    const existingTabs = await tx
+      .select()
+      .from(formTabs)
+      .where(eq(formTabs.formId, formId));
+    const existingSections = await tx
+      .select()
+      .from(formSections)
+      .where(eq(formSections.formId, formId));
+    const existingFields = await tx
+      .select()
+      .from(formFieldReferences)
+      .where(eq(formFieldReferences.formId, formId));
+
+    const existingTabMap = new Map(existingTabs.map((t) => [t.id, t]));
+    const existingSectionMap = new Map(existingSections.map((s) => [s.id, s]));
+    const existingFieldMap = new Map(existingFields.map((f) => [f.id, f]));
+
+    // ID mapping for client-generated / temp IDs -> authoritative DB UUIDs
+    const idMap = new Map<string, string>();
+
+    const submittedTabIds = new Set(
+      draft.tabs.map((t) => t.id).filter((id): id is string => !!id && existingTabMap.has(id))
+    );
+    const submittedSectionIds = new Set(
+      draft.sections.map((s) => s.id).filter((id): id is string => !!id && existingSectionMap.has(id))
+    );
+    const submittedFieldIds = new Set(
+      draft.fields.map((f) => f.id).filter((id): id is string => !!id && existingFieldMap.has(id))
+    );
+
+    // 2. Shift existing rows to high temporary displayOrder to avoid unique constraint collisions
+    for (let i = 0; i < existingTabs.length; i++) {
+      await tx
+        .update(formTabs)
+        .set({ displayOrder: 10000 + i + 1, updatedAt: now })
+        .where(eq(formTabs.id, existingTabs[i].id));
+    }
+    for (let i = 0; i < existingSections.length; i++) {
+      await tx
+        .update(formSections)
+        .set({ displayOrder: 10000 + i + 1, updatedAt: now })
+        .where(eq(formSections.id, existingSections[i].id));
+    }
+    for (let i = 0; i < existingFields.length; i++) {
+      await tx
+        .update(formFieldReferences)
+        .set({ displayOrder: 10000 + i + 1, updatedAt: now })
+        .where(eq(formFieldReferences.id, existingFields[i].id));
+    }
+
+    // 3. Parent-first Upsert: Tabs
+    for (let i = 0; i < draft.tabs.length; i++) {
+      const t = draft.tabs[i];
+      const targetOrder = i + 1;
+      const cleanTitle = t.title.trim();
+
+      if (t.id && existingTabMap.has(t.id)) {
+        await tx
+          .update(formTabs)
+          .set({ title: cleanTitle, displayOrder: targetOrder, updatedAt: now })
+          .where(eq(formTabs.id, t.id));
+        idMap.set(t.id, t.id);
+      } else {
+        const generatedKey = t.key && t.key.trim() ? t.key.trim() : `tab_${Math.random().toString(36).substring(7)}`;
+        const [inserted] = await tx
+          .insert(formTabs)
+          .values({
+            formId,
+            tabKey: generatedKey,
+            title: cleanTitle,
+            displayOrder: targetOrder,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning();
+        if (t.id) {
+          idMap.set(t.id, inserted.id);
+        }
+      }
+    }
+
+    // 4. Parent-first Upsert: Sections
+    const tabSectionOrderCounters = new Map<string, number>();
+
+    for (let i = 0; i < draft.sections.length; i++) {
+      const s = draft.sections[i];
+      const resolvedTabId = idMap.get(s.tabId) || s.tabId;
+      const currentOrderInTab = (tabSectionOrderCounters.get(resolvedTabId) || 0) + 1;
+      tabSectionOrderCounters.set(resolvedTabId, currentOrderInTab);
+      const cleanTitle = s.title.trim();
+
+      if (s.id && existingSectionMap.has(s.id)) {
+        await tx
+          .update(formSections)
+          .set({
+            tabId: resolvedTabId,
+            title: cleanTitle,
+            displayOrder: currentOrderInTab,
+            updatedAt: now,
+          })
+          .where(eq(formSections.id, s.id));
+        idMap.set(s.id, s.id);
+      } else {
+        const generatedKey = s.key && s.key.trim() ? s.key.trim() : `sec_${Math.random().toString(36).substring(7)}`;
+        const [inserted] = await tx
+          .insert(formSections)
+          .values({
+            formId,
+            tabId: resolvedTabId,
+            sectionKey: generatedKey,
+            title: cleanTitle,
+            displayOrder: currentOrderInTab,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning();
+        if (s.id) {
+          idMap.set(s.id, inserted.id);
+        }
+      }
+    }
+
+    // 5. Parent-first Upsert: Fields
+    const sectionFieldOrderCounters = new Map<string, number>();
+
+    for (let i = 0; i < draft.fields.length; i++) {
+      const f = draft.fields[i];
+      const resolvedSectionId = idMap.get(f.sectionId) || f.sectionId;
+      const currentOrderInSec = (sectionFieldOrderCounters.get(resolvedSectionId) || 0) + 1;
+      sectionFieldOrderCounters.set(resolvedSectionId, currentOrderInSec);
+
+      // ADD_CASE supports static visible/editable/required overrides
+      // CASE_VIEW relies on queue rules; static overrides remain default
+      const visibleOverride = isAddCase ? (f.isVisible ?? true) : true;
+      const editableOverride = isAddCase ? (f.isEditable ?? true) : true;
+      const requiredOverride = isAddCase ? (f.isRequired ?? false) : false;
+
+      if (f.id && existingFieldMap.has(f.id)) {
+        await tx
+          .update(formFieldReferences)
+          .set({
+            sectionId: resolvedSectionId,
+            controlType: f.controlType,
+            visibleOverride,
+            editableOverride,
+            requiredOverride,
+            displayOrder: currentOrderInSec,
+            updatedAt: now,
+          })
+          .where(eq(formFieldReferences.id, f.id));
+        idMap.set(f.id, f.id);
+      } else {
+        const [inserted] = await tx
+          .insert(formFieldReferences)
+          .values({
+            solutionId,
+            formId,
+            sectionId: resolvedSectionId,
+            propertyId: f.propertyId,
+            controlType: f.controlType,
+            visibleOverride,
+            editableOverride,
+            requiredOverride,
+            displayOrder: currentOrderInSec,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning();
+        if (f.id) {
+          idMap.set(f.id, inserted.id);
+        }
+      }
+    }
+
+    // 6. Synchronize Queue Rules
+    if (!isAddCase) {
+      // CASE_VIEW: synchronize sparse queue rules
+      const existingQueueRules = await tx
+        .select()
+        .from(formFieldQueueRules)
+        .where(eq(formFieldQueueRules.formId, formId));
+
+      const existingRuleMap = new Map(
+        existingQueueRules.map((r) => [`${r.fieldReferenceId}:${r.queueId}`, r])
+      );
+      const activeNonDefaultRuleKeys = new Set<string>();
+
+      if (Array.isArray(draft.queueRules)) {
+        for (const qr of draft.queueRules) {
+          const resolvedFieldRefId = idMap.get(qr.fieldReferenceId) || qr.fieldReferenceId;
+          const isVisible = qr.isVisible ?? true;
+          const isEditable = qr.isEditable ?? true;
+          const isRequired = qr.isRequired ?? false;
+          const isDefault = isVisible === true && isEditable === true && isRequired === false;
+
+          if (isDefault) {
+            // Sparse storage: do not persist all-default rules
+            continue;
+          }
+
+          const ruleKey = `${resolvedFieldRefId}:${qr.queueId}`;
+          activeNonDefaultRuleKeys.add(ruleKey);
+
+          const existing = existingRuleMap.get(ruleKey);
+          if (existing) {
+            await tx
+              .update(formFieldQueueRules)
+              .set({
+                isVisible,
+                isEditable,
+                isRequired,
+                updatedAt: now,
+              })
+              .where(eq(formFieldQueueRules.id, existing.id));
+          } else {
+            await tx.insert(formFieldQueueRules).values({
+              solutionId,
+              formId,
+              fieldReferenceId: resolvedFieldRefId,
+              queueId: qr.queueId,
+              isVisible,
+              isEditable,
+              isRequired,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+        }
+      }
+
+      // Prune existing rules that are no longer present in draft or became all-default
+      for (const eqr of existingQueueRules) {
+        const key = `${eqr.fieldReferenceId}:${eqr.queueId}`;
+        if (!activeNonDefaultRuleKeys.has(key)) {
+          await tx.delete(formFieldQueueRules).where(eq(formFieldQueueRules.id, eqr.id));
+        }
+      }
+    } else {
+      // ADD_CASE: ensure no queue rules exist
+      await tx.delete(formFieldQueueRules).where(eq(formFieldQueueRules.formId, formId));
+    }
+
+    // 7. Child-first Deletions: Fields -> Sections -> Tabs
+    // Delete fields no longer present in draft
+    for (const ef of existingFields) {
+      if (!submittedFieldIds.has(ef.id)) {
+        await tx.delete(formFieldReferences).where(eq(formFieldReferences.id, ef.id));
+      }
+    }
+
+    // Delete sections no longer present in draft
+    for (const es of existingSections) {
+      if (!submittedSectionIds.has(es.id)) {
+        await tx.delete(formSections).where(eq(formSections.id, es.id));
+      }
+    }
+
+    // Delete tabs no longer present in draft
+    for (const et of existingTabs) {
+      if (!submittedTabIds.has(et.id)) {
+        await tx.delete(formTabs).where(eq(formTabs.id, et.id));
+      }
+    }
+
+    // 8. Return fresh canonical FormAggregate
+    const agg = await this.getFormAggregate(solutionId, organisationId, formId, tx);
+    if (!agg) {
+      throw new Error("Failed to re-read form aggregate after save.");
+    }
+    return agg;
   }
 }
 

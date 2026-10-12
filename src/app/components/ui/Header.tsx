@@ -149,6 +149,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
           )}
+
         </div>
 
         {/* User Context & Menu */}

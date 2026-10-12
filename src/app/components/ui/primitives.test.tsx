@@ -15,6 +15,9 @@ import {
   SkipLink,
   VisuallyHidden,
   Spinner,
+  Dialog,
+  Checkbox,
+  RadioGroup,
 } from "./index";
 
 describe("Stage B1 Minimum Visual Primitives Test Suite", () => {
@@ -48,6 +51,20 @@ describe("Stage B1 Minimum Visual Primitives Test Suite", () => {
       render(<Button ref={ref}>With Ref</Button>);
       expect(ref.current).toBeInstanceOf(HTMLButtonElement);
       expect(ref.current).toHaveTextContent("With Ref");
+    });
+
+    it("defaults to content-sized width and supports isFullWidth and style overrides", () => {
+      const { rerender } = render(<Button>Content Sized</Button>);
+      const defaultBtn = screen.getByRole("button", { name: "Content Sized" });
+      expect(defaultBtn.style.width).toBe("");
+
+      rerender(<Button isFullWidth>Full Width</Button>);
+      const fullBtn = screen.getByRole("button", { name: "Full Width" });
+      expect(fullBtn.style.width).toBe("100%");
+
+      rerender(<Button style={{ width: "fit-content" }}>Fit Content</Button>);
+      const customBtn = screen.getByRole("button", { name: "Fit Content" });
+      expect(customBtn.style.width).toBe("fit-content");
     });
   });
 
@@ -220,6 +237,109 @@ describe("Stage B1 Minimum Visual Primitives Test Suite", () => {
       render(<VisuallyHidden>Screen reader text</VisuallyHidden>);
       const span = screen.getByText("Screen reader text");
       expect(span).toBeInTheDocument();
+    });
+  });
+
+  describe("Dialog Primitive", () => {
+    it("renders modal semantics with role=dialog and title", () => {
+      render(
+        <Dialog isOpen={true} title="Test Modal" onCancel={() => {}}>
+          <p>Modal content</p>
+        </Dialog>
+      );
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText("Test Modal")).toBeInTheDocument();
+      expect(screen.getByText("Modal content")).toBeInTheDocument();
+    });
+
+    it("renders default footer when onConfirm is provided", () => {
+      render(
+        <Dialog isOpen={true} title="Confirm Action" onConfirm={() => {}} onCancel={() => {}} confirmLabel="Proceed" cancelLabel="Dismiss">
+          <p>Content</p>
+        </Dialog>
+      );
+      expect(screen.getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Proceed" })).toBeInTheDocument();
+    });
+
+    it("suppresses default footer when hideFooter=true is passed", () => {
+      render(
+        <Dialog isOpen={true} title="Custom Form Modal" onCancel={() => {}} hideFooter={true}>
+          <button>Custom Action</button>
+        </Dialog>
+      );
+      expect(screen.getByRole("button", { name: "Custom Action" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Checkbox Primitive", () => {
+    it("renders label and handles checked state changes with proper contrast styling", async () => {
+      const user = userEvent.setup();
+      let isChecked = false;
+      const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        isChecked = e.target.checked;
+      };
+
+      const { rerender } = render(<Checkbox label="Sensitive Property" checked={false} onChange={handleChange} />);
+      const checkbox = screen.getByRole("checkbox", { name: "Sensitive Property" }) as HTMLInputElement;
+      expect(checkbox).not.toBeChecked();
+
+      await user.click(checkbox);
+      expect(isChecked).toBe(true);
+
+      rerender(<Checkbox label="Sensitive Property" checked={true} onChange={handleChange} />);
+      expect(checkbox).toBeChecked();
+      expect(checkbox.getAttribute("style")).toContain("var(--action-primary)");
+    });
+  });
+
+  describe("RadioGroup Primitive", () => {
+    it("renders options with role=radiogroup and handles selection with contrast styling", async () => {
+      const user = userEvent.setup();
+      let selectedVal = "CHECKBOX";
+      const handleChange = (val: string) => {
+        selectedVal = val;
+      };
+
+      const { rerender } = render(
+        <RadioGroup
+          name="boolControl"
+          ariaLabel="Default Control"
+          value="CHECKBOX"
+          onChange={handleChange}
+          options={[
+            { value: "CHECKBOX", label: "Checkbox" },
+            { value: "YES_NO", label: "Yes / No" },
+          ]}
+        />
+      );
+
+      expect(screen.getByRole("radiogroup", { name: "Default Control" })).toBeInTheDocument();
+      const checkboxRadio = screen.getByLabelText("Checkbox") as HTMLInputElement;
+      const yesNoRadio = screen.getByLabelText("Yes / No") as HTMLInputElement;
+      
+      expect(checkboxRadio).toBeChecked();
+      expect(checkboxRadio.getAttribute("style")).toContain("var(--action-primary)");
+      expect(yesNoRadio).not.toBeChecked();
+      expect(yesNoRadio.getAttribute("style")).toContain("var(--border-default)");
+
+      await user.click(yesNoRadio);
+      expect(selectedVal).toBe("YES_NO");
+
+      rerender(
+        <RadioGroup
+          name="boolControl"
+          ariaLabel="Default Control"
+          value="YES_NO"
+          onChange={handleChange}
+          options={[
+            { value: "CHECKBOX", label: "Checkbox" },
+            { value: "YES_NO", label: "Yes / No" },
+          ]}
+        />
+      );
+      expect(screen.getByLabelText("Yes / No")).toBeChecked();
     });
   });
 });

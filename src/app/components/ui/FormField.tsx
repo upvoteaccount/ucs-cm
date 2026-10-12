@@ -13,6 +13,7 @@ export interface FormFieldProps {
     id: string;
     "aria-describedby"?: string;
     isInvalid?: boolean;
+    "aria-invalid"?: "true" | undefined;
   }) => React.ReactNode;
   style?: React.CSSProperties;
 }
@@ -48,6 +49,7 @@ export const FormField: React.FC<FormFieldProps> = ({
         id,
         "aria-describedby": describedBy,
         isInvalid: Boolean(errorMessage),
+        "aria-invalid": errorMessage ? "true" : undefined,
       })}
       {helperText && <HelperText id={helperId!}>{helperText}</HelperText>}
       {errorMessage && <ValidationMessage id={errorId!}>{errorMessage}</ValidationMessage>}

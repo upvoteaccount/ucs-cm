@@ -21,11 +21,11 @@ Core stored types (`TEXT`, `NUMBER`, `DATE`, `DATETIME`, `BOOLEAN`, `USER_REFERE
 ## Canonical Data Dictionary Definitions
 Canonical property storage definitions are owned by the Solution Data Dictionary. Form presentation controls are configured separately in the Form Studio.
 
-| Local Symbolic Name | Generated Technical Property Name | Label | Stored Data Type | Format Preset / Choice List | Creation Required | Sensitive |
-|---|---|---|---|---|---:|---:|
-| customer_name | CDD_customer_name | Customer Name | TEXT | None | Yes | No |
-| customer_reference | CDD_customer_reference | Customer Reference | TEXT | None | Yes | Yes |
-| date_of_birth | CDD_date_of_birth | DATE | None | Yes | Yes |
+| Local Symbolic Name | Generated Technical Name | Label | Stored Data Type | Choice List | Required | Sensitive |
+|---|---|---|---|---|---|---|
+| `CUSTOMER_NAME` | `CDD_CUSTOMER_NAME` | Customer Name | `TEXT` | None | Yes | No |
+| `CUSTOMER_REFERENCE` | `CDD_CUSTOMER_REFERENCE` | Customer Reference | `TEXT` | None | Yes | No |
+| `DATE_OF_BIRTH` | `CDD_DATE_OF_BIRTH` | Date of Birth | `DATE` | None | Yes | No |
 | email_address | CDD_email_address | TEXT | EMAIL format preset | No | Yes |
 | mobile_number | CDD_mobile_number | TEXT | PHONE format preset | Yes | Yes |
 | exception_type | CDD_exception_type | TEXT | Choice List: ExceptionTypes | Yes | No |

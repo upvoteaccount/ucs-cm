@@ -75,19 +75,33 @@ describe("INC-03C2 Solution Repository & Service Test Suite", () => {
       expect(sol.status).toBe("DRAFT");
       expect(sol.organisationId).toBe(orgAId);
 
-      // Verify exactly 1 initial form was provisioned
+      // Verify exactly 2 system forms were provisioned: Add Case Form and Case View Form
       const forms = await db.select().from(solutionForms).where(eq(solutionForms.solutionId, sol.id));
-      expect(forms.length).toBe(1);
-      expect(forms[0].formKey).toBe("initial_form");
+      expect(forms.length).toBe(2);
 
-      // Verify exactly 1 default tab was provisioned
-      const tabs = await db.select().from(formTabs).where(eq(formTabs.formId, forms[0].id));
-      expect(tabs.length).toBe(1);
-      expect(tabs[0].displayOrder).toBe(1);
+      const addCaseForm = forms.find((f) => f.formType === "ADD_CASE");
+      const caseViewForm = forms.find((f) => f.formType === "CASE_VIEW");
 
-      // Verify 0 default sections were created
-      const sections = await db.select().from(formSections).where(eq(formSections.formId, forms[0].id));
-      expect(sections.length).toBe(0);
+      expect(addCaseForm).toBeDefined();
+      expect(addCaseForm!.formKey).toBe("add_case");
+      expect(addCaseForm!.name).toBe("Add Case Form");
+
+      expect(caseViewForm).toBeDefined();
+      expect(caseViewForm!.formKey).toBe("case_view");
+      expect(caseViewForm!.name).toBe("Case View Form");
+
+      // Verify each form gets exactly 1 Default Tab ("Default Tab", not "Main")
+      for (const form of forms) {
+        const tabs = await db.select().from(formTabs).where(eq(formTabs.formId, form.id));
+        expect(tabs.length).toBe(1);
+        expect(tabs[0].title).toBe("Default Tab");
+        expect(tabs[0].tabKey).toBe("tab_1");
+        expect(tabs[0].displayOrder).toBe(1);
+
+        // Verify 0 default sections were created
+        const sections = await db.select().from(formSections).where(eq(formSections.formId, form.id));
+        expect(sections.length).toBe(0);
+      }
 
       // Verify SOLUTION_CREATED audit event was written in the same transaction
       const [audit] = await db

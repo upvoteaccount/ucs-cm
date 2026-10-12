@@ -43,7 +43,12 @@ export async function POST(req: NextRequest) {
       throw new ValidationError("Client-supplied organisationId or actorUserId is not permitted.");
     }
 
-    const solution = await solutionService.createSolution(body, context);
+    const payload = {
+      ...body,
+      solutionPrefix: body.solutionPrefix || body.prefix,
+    };
+
+    const solution = await solutionService.createSolution(payload, context);
     return NextResponse.json({ solution }, { status: 201 });
   } catch (err: unknown) {
     if (err instanceof AppError) {

@@ -21,6 +21,7 @@ export interface SolutionPropertyRow {
   defaultValue: string | null;
   helpText: string | null;
   isSensitive: boolean;
+  defaultControlType: string | null;
   validationRules: Record<string, unknown> | null;
   createdAt: Date;
   updatedAt: Date;
@@ -50,6 +51,7 @@ export class SolutionPropertyRepository {
         defaultValue: solutionProperties.defaultValue,
         helpText: solutionProperties.helpText,
         isSensitive: solutionProperties.isSensitive,
+        defaultControlType: solutionProperties.defaultControlType,
         validationRules: solutionProperties.validationRules,
         createdAt: solutionProperties.createdAt,
         updatedAt: solutionProperties.updatedAt,
@@ -90,6 +92,7 @@ export class SolutionPropertyRepository {
         defaultValue: solutionProperties.defaultValue,
         helpText: solutionProperties.helpText,
         isSensitive: solutionProperties.isSensitive,
+        defaultControlType: solutionProperties.defaultControlType,
         validationRules: solutionProperties.validationRules,
         createdAt: solutionProperties.createdAt,
         updatedAt: solutionProperties.updatedAt,
@@ -130,6 +133,7 @@ export class SolutionPropertyRepository {
         defaultValue: solutionProperties.defaultValue,
         helpText: solutionProperties.helpText,
         isSensitive: solutionProperties.isSensitive,
+        defaultControlType: solutionProperties.defaultControlType,
         validationRules: solutionProperties.validationRules,
         createdAt: solutionProperties.createdAt,
         updatedAt: solutionProperties.updatedAt,
@@ -207,6 +211,7 @@ export class SolutionPropertyRepository {
       defaultValue?: string | null;
       helpText?: string | null;
       isSensitive?: boolean;
+      defaultControlType?: string | null;
       validationRules?: Record<string, unknown> | null;
     }
   ): Promise<SolutionPropertyRow> {
@@ -224,6 +229,7 @@ export class SolutionPropertyRepository {
         defaultValue: data.defaultValue || null,
         helpText: data.helpText || null,
         isSensitive: data.isSensitive ?? false,
+        defaultControlType: data.defaultControlType || null,
         validationRules: (data.validationRules !== null && data.validationRules !== undefined) ? data.validationRules : sql`'null'::jsonb`,
       })
       .returning();
@@ -249,6 +255,7 @@ export class SolutionPropertyRepository {
       defaultValue?: string | null;
       helpText?: string | null;
       isSensitive?: boolean;
+      defaultControlType?: string | null;
       validationRules?: Record<string, unknown> | null;
     }
   ): Promise<SolutionPropertyRow | null> {
@@ -267,6 +274,7 @@ export class SolutionPropertyRepository {
     if (data.defaultValue !== undefined) updateValues.defaultValue = data.defaultValue;
     if (data.helpText !== undefined) updateValues.helpText = data.helpText;
     if (data.isSensitive !== undefined) updateValues.isSensitive = data.isSensitive;
+    if (data.defaultControlType !== undefined) updateValues.defaultControlType = data.defaultControlType;
     if (data.validationRules !== undefined) {
       updateValues.validationRules = data.validationRules !== null ? data.validationRules : sql`'null'::jsonb`;
     }

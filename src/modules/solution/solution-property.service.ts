@@ -52,6 +52,7 @@ export interface CreatePropertyInput {
   defaultValue?: string | null;
   helpText?: string | null;
   isSensitive?: boolean;
+  defaultControlType?: string | null;
   validationRules?: Record<string, unknown>;
 }
 
@@ -66,6 +67,7 @@ export interface UpdatePropertyInput {
   defaultValue?: string | null;
   helpText?: string | null;
   isSensitive?: boolean;
+  defaultControlType?: string | null;
   validationRules?: Record<string, unknown>;
 }
 
@@ -238,20 +240,24 @@ export class SolutionPropertyService {
         }
 
         // 2. Insert property
-        const property = await solutionPropertyRepository.createPropertyInTx(tx, {
-          solutionId,
-          localSymbolicName,
-          generatedTechnicalName,
-          label: input.label.trim(),
-          storedDataType: dataType,
-          formatPreset: preset,
-          choiceListId,
-          cardinality: card,
-          defaultValue: input.defaultValue ?? null,
-          helpText: input.helpText ?? null,
-          isSensitive: input.isSensitive ?? false,
-          validationRules: canonicalRules as Record<string, unknown> | null,
-        });
+        const property = await solutionPropertyRepository.createPropertyInTx(
+          tx,
+          {
+            solutionId,
+            localSymbolicName,
+            generatedTechnicalName,
+            label: input.label.trim(),
+            storedDataType: dataType,
+            formatPreset: preset,
+            choiceListId,
+            cardinality: card,
+            defaultValue: input.defaultValue !== undefined ? input.defaultValue : null,
+            helpText: input.helpText !== undefined ? input.helpText : null,
+            isSensitive: input.isSensitive ?? false,
+            defaultControlType: input.defaultControlType !== undefined ? input.defaultControlType : null,
+            validationRules: canonicalRules as Record<string, unknown> | null,
+          }
+        );
 
         // Mask sensitive defaults or validation rules in audit payload
         const auditDefault = property.isSensitive ? "[REDACTED]" : property.defaultValue;
@@ -460,6 +466,7 @@ export class SolutionPropertyService {
             defaultValue: input.defaultValue,
             helpText: input.helpText,
             isSensitive: input.isSensitive,
+            defaultControlType: input.defaultControlType,
             validationRules: canonicalRulesToUpdate as Record<string, unknown> | null | undefined,
           }
         );

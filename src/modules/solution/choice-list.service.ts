@@ -12,6 +12,7 @@ import {
   ValidationError,
   ConflictError,
 } from "../../shared/errors";
+import { constructChoiceListKey } from "./solution-identity";
 
 export function validateSymbolicKey(rawKey: string, fieldName: string = "Key"): string {
   if (!rawKey || typeof rawKey !== "string") {
@@ -54,6 +55,10 @@ export interface DeactivateOptionInput {
   expectedRevision: number;
 }
 
+export interface ReactivateOptionInput {
+  expectedRevision: number;
+}
+
 export interface ReorderOptionsInput {
   expectedRevision: number;
   optionIds: string[];
@@ -66,7 +71,7 @@ export class ChoiceListService {
   async listChoiceLists(
     solutionId: string,
     context: SessionContext
-  ): Promise<ChoiceListRow[]> {
+  ): Promise<(ChoiceListRow & { options: ChoiceOptionRow[] })[]> {
     const solution = await solutionRepository.findById(
       solutionId,
       context.activeOrganisation.id
@@ -75,10 +80,19 @@ export class ChoiceListService {
       throw new NotFoundError("Solution not found");
     }
 
-    return choiceListRepository.listChoiceListsBySolution(
+    const lists = await choiceListRepository.listChoiceListsBySolution(
       solutionId,
       context.activeOrganisation.id
     );
+
+    const listsWithOptions = await Promise.all(
+      lists.map(async (cl) => {
+        const options = await choiceListRepository.listOptionsByChoiceList(cl.id);
+        return { ...cl, options };
+      })
+    );
+
+    return listsWithOptions;
   }
 
   /**
@@ -88,7 +102,7 @@ export class ChoiceListService {
     solutionId: string,
     choiceListId: string,
     context: SessionContext
-  ): Promise<ChoiceListRow> {
+  ): Promise<ChoiceListRow & { options: ChoiceOptionRow[] }> {
     const solution = await solutionRepository.findById(
       solutionId,
       context.activeOrganisation.id
@@ -106,7 +120,8 @@ export class ChoiceListService {
       throw new NotFoundError("Choice list not found");
     }
 
-    return cl;
+    const options = await choiceListRepository.listOptionsByChoiceList(cl.id);
+    return { ...cl, options };
   }
 
   /**
@@ -134,13 +149,14 @@ export class ChoiceListService {
       throw new ValidationError("Choice list name must not exceed 255 characters.");
     }
 
-    const key = validateSymbolicKey(input.key, "Choice list key");
     const orgId = context.activeOrganisation.id;
 
     const solution = await solutionRepository.findById(solutionId, orgId);
     if (!solution) {
       throw new NotFoundError("Solution not found");
     }
+
+    const key = constructChoiceListKey(solution.solutionPrefix, input.key || input.name);
 
     const db = getDb();
 
@@ -341,6 +357,15 @@ export class ChoiceListService {
     const orgId = context.activeOrganisation.id;
 
     await this.getChoiceListById(solutionId, choiceListId, context);
+
+    const existingOpt = await choiceListRepository.findOptionByKey(key, choiceListId);
+    if (existingOpt) {
+      if (!existingOpt.isActive) {
+        throw new ConflictError("An inactive option with this value already exists. Reactivate it instead.");
+      } else {
+        throw new ConflictError(`Choice option with key '${key}' already exists in this choice list.`);
+      }
+    }
 
     const db = getDb();
 
@@ -602,6 +627,100 @@ export class ChoiceListService {
   }
 
   /**
+   * Reactivates Choice Option (isActive = true).
+   * Preserves stable key, label and display order.
+   * Atomic transaction: Solution revision increment + Option reactivation + CHOICE_OPTION_REACTIVATED audit event.
+   */
+  async reactivateOption(
+    solutionId: string,
+    choiceListId: string,
+    optionId: string,
+    input: ReactivateOptionInput,
+    context: SessionContext
+  ): Promise<{ option: ChoiceOptionRow; solutionRevision: number }> {
+    if (
+      input.expectedRevision === undefined ||
+      input.expectedRevision === null ||
+      typeof input.expectedRevision !== "number" ||
+      !Number.isInteger(input.expectedRevision)
+    ) {
+      throw new ValidationError("expectedRevision is required and must be an integer.");
+    }
+
+    const orgId = context.activeOrganisation.id;
+    await this.getChoiceListById(solutionId, choiceListId, context);
+
+    const currentOption = await choiceListRepository.findOptionById(optionId, choiceListId);
+    if (!currentOption) {
+      throw new NotFoundError("Choice option not found");
+    }
+
+    const solution = await solutionRepository.findById(solutionId, orgId);
+    if (!solution) {
+      throw new NotFoundError("Solution not found");
+    }
+
+    // Idempotent no-op for repeated reactivation
+    if (currentOption.isActive) {
+      return { option: currentOption, solutionRevision: solution.revision };
+    }
+
+    const db = getDb();
+
+    return db.transaction(async (tx) => {
+      // 1. Single atomic compare-and-update operation to increment Solution revision
+      const updatedSolution = await solutionRepository.updateSolutionInTx(
+        tx,
+        solutionId,
+        orgId,
+        input.expectedRevision,
+        {}
+      );
+
+      if (!updatedSolution) {
+        throw new ConflictError("Stale update rejected: Solution revision conflict.", {
+          expectedRevision: input.expectedRevision,
+        });
+      }
+
+      // 2. Reactivate Option
+      const updated = await choiceListRepository.reactivateOptionInTx(
+        tx,
+        optionId,
+        choiceListId
+      );
+
+      if (!updated) {
+        throw new NotFoundError("Choice option not found");
+      }
+
+      // 3. Record CHOICE_OPTION_REACTIVATED audit event in the same transaction
+      await tx.insert(auditEvents).values({
+        organisationId: orgId,
+        category: "ORG",
+        eventType: "CHOICE_OPTION_REACTIVATED",
+        actorType: "AUTHENTICATED_USER",
+        actorUserId: context.user.id,
+        actorIdentifier: context.user.email,
+        entityType: "CHOICE_OPTION",
+        entityId: optionId,
+        beforeState: {
+          isActive: currentOption.isActive,
+        },
+        afterState: {
+          isActive: true,
+        },
+        metadata: {
+          expectedRevision: input.expectedRevision,
+          newSolutionRevision: updatedSolution.revision,
+        },
+      });
+
+      return { option: updated, solutionRevision: updatedSolution.revision };
+    });
+  }
+
+  /**
    * Reorders Choice Options atomically.
    * Payload must contain every existing option ID for the choice list exactly once.
    * Atomic transaction: Solution revision increment + Options reordering + CHOICE_LIST_UPDATED audit event.
@@ -694,6 +813,79 @@ export class ChoiceListService {
       });
 
       return { options: reorderedOptions, solutionRevision: updatedSolution.revision };
+    });
+  }
+
+  /**
+   * Deletes a reusable Choice List.
+   * Blocked if referenced by any Property.
+   */
+  async deleteChoiceList(
+    solutionId: string,
+    choiceListId: string,
+    input: { expectedRevision: number },
+    context: SessionContext
+  ): Promise<{ success: boolean; solutionRevision: number }> {
+    if (
+      input.expectedRevision === undefined ||
+      input.expectedRevision === null ||
+      typeof input.expectedRevision !== "number" ||
+      !Number.isInteger(input.expectedRevision)
+    ) {
+      throw new ValidationError("expectedRevision is required and must be an integer.");
+    }
+
+    const orgId = context.activeOrganisation.id;
+    const current = await this.getChoiceListById(solutionId, choiceListId, context);
+
+    // Dependency check: cannot delete if referenced by any property
+    const dependentProps = await choiceListRepository.findDependentProperties(choiceListId);
+    if (dependentProps.length > 0) {
+      const propLabels = dependentProps.map((p) => `"${p.label}"`).join(" and ");
+      throw new ConflictError(
+        `Cannot delete "${current.name}". It is used by ${propLabels}.`
+      );
+    }
+
+    const db = getDb();
+
+    return db.transaction(async (tx) => {
+      const updatedSolution = await solutionRepository.updateSolutionInTx(
+        tx,
+        solutionId,
+        orgId,
+        input.expectedRevision,
+        {}
+      );
+
+      if (!updatedSolution) {
+        throw new ConflictError("Stale update rejected: Solution revision conflict.", {
+          expectedRevision: input.expectedRevision,
+        });
+      }
+
+      await choiceListRepository.deleteChoiceListInTx(tx, choiceListId, solutionId);
+
+      await tx.insert(auditEvents).values({
+        organisationId: orgId,
+        category: "ORG",
+        eventType: "CHOICE_LIST_DELETED",
+        actorType: "AUTHENTICATED_USER",
+        actorUserId: context.user.id,
+        actorIdentifier: context.user.email,
+        entityType: "CHOICE_LIST",
+        entityId: choiceListId,
+        beforeState: {
+          name: current.name,
+          key: current.key,
+        },
+        metadata: {
+          expectedRevision: input.expectedRevision,
+          newSolutionRevision: updatedSolution.revision,
+        },
+      });
+
+      return { success: true, solutionRevision: updatedSolution.revision };
     });
   }
 }

@@ -363,18 +363,20 @@ Users can:
 In Phase 1, the Case Type layer is eliminated. A Solution application directly owns:
 * Solution Data Dictionary properties
 * Solution-owned reusable Choice Lists
-* Solution Form Layouts
+* Shared Solution Form Layout
+* Solution Work Queues
+* Solution Sequential Workflow
 
-Choice-list selection cardinality ownership (whether single-select vs multi-select cardinality is specified on the Choice List definition or on the Property/Control binding) is recorded as UNRESOLVED and explicitly deferred to INC-03B design without structurally implying an answer.
+Choice-list selection cardinality is resolved: **Cardinality belongs to the Property** (`SINGLE` or `MULTIPLE`). `SINGLE` cardinality properties permit `DROPDOWN` or `RADIO` controls. `MULTIPLE` cardinality properties permit `MULTI_SELECT_DROPDOWN` or `CHECKBOXES` controls.
 
 ## 10.3 Solution Data Dictionary & Property Identity Contract
 
 Users can create configurable Data Dictionary properties.
 
 ### Property Identity Contract
-- **Local Symbolic Name**: Lowercase `snake_case` identifier entered by the user (e.g. `customer_name`).
+- **Local Symbolic Name**: Lowercase or uppercase symbolic name entered by the user, normalized to canonical uppercase `SNAKE_CASE` (e.g. `FIRST_NAME`).
 - **Solution Prefix**: Uppercase prefix owned by the solution aggregate (e.g. `CDD`).
-- **Generated Read-Only Technical Property Name**: Automatically constructed as `<PREFIX>_<LOCAL_SYMBOLIC_NAME>` (e.g. `CDD_customer_name`), containing exactly one underscore separator.
+- **Generated Read-Only Technical Property Name**: Automatically constructed as `<PREFIX>_<LOCAL_SYMBOLIC_NAME>` (e.g. `CDD_FIRST_NAME`), containing exactly one underscore separator.
 - **Rules**: Must start with an alphabetic character, contain only alphanumeric and underscore characters, enforce maximum length of 64 characters, reject reserved names and unsupported characters, and enforce uniqueness within the Solution aggregate.
 - **Mutability**: Local symbolic name and data type are mutable ONLY while the property remains draft and unused within the solution layout.
 
@@ -401,20 +403,20 @@ Grid / Repeating Table is explicitly deferred.
 ### Boolean Semantics
 A single Boolean checkbox and Yes/No Boolean radio do NOT require or use a choice list. Checkbox-group support remains deferred pending an approved multi-choice contract.
 
-## 10.4 Form Designer & One-Place Field Inspector
+## 10.4 Form Designer & Shared Form Structure
+Users can configure one shared Form layout per Solution application that is reused across the workflow lifecycle. Forms do NOT vary by creating separate per-queue or per-step form layouts.
 
 Users can:
-
-* Add Data Dictionary properties to a form layout
+* Add Data Dictionary properties to the shared form layout
 * Remove property references from the form layout
 * Organise fields into sections and tabs (initial layout starts with one default tab provisioned on creation)
 * Reorder fields deterministically using move-up / move-down controls
-* Configure field reference settings via a **One-Place Field Inspector**
+* Configure base field reference settings via a **One-Place Field Inspector**
 
-### One-Place Field Inspector Split
-Selecting a form field in Form Studio exposes BOTH configuration tiers in a single inspector panel without requiring navigation back to the Data area for ordinary field changes:
+### One-Place Field Inspector & Queue-Context Field Overrides
+Selecting a form field reference in Form Studio exposes BOTH configuration tiers:
 - **Canonical Data Dictionary Tier ("Applies everywhere")**: Stored data type, label, format preset (`EMAIL`, `PHONE`), choice list binding, default value, help text, minimum/maximum length or range constraints, pattern/regex validation rules.
-- **Form Reference Tier ("This form only")**: Form layout placement (tab, section), display ordering sequence, static visibility (`visible`), static enablement (`enabled`), static editability (`editable`), and static required state (`required`).
+- **Form Reference Tier ("Base Form Structure & Queue Rules")**: Form layout placement (tab, section), display ordering sequence, base control type, and queue-context field behavior rules (defining static visibility (`visible`/`hidden`), editability (`editable`/`read-only`), and requirement state (`mandatory`/`optional`) per work context/queue without duplicating forms).
 
 ## 10.5 Role Designer
 
@@ -429,50 +431,34 @@ A solution role may contain multiple users.
 
 Platform roles and solution roles must remain separate concepts.
 
-## 10.6 Queue Designer
+## 10.6 Queue & User Access Configuration
 
 > [!NOTE]
 > Deferred in INC-03; capability planned for INC-04.
 
+A Solution aggregate defines work queues for routing work items.
+
 Users can:
+* Create work queues (e.g. `SOL Maker`, `SOL Checker`, `TFC Comp`, `TFC Auth`)
+* Assign users to one or more queues directly
+* Determine queue accessibility for Navigator In Baskets and WID processing
 
-* Create work queues
-* Give queue access to one or more solution roles
-* Associate workflow steps with queues
-* View queue membership
+Tasks/WIDs are routed to queues rather than being directly assigned to one fixed user by default.
 
-Tasks are routed to queues rather than being directly assigned to one fixed user by default.
-
-## 10.7 Workflow Designer
+## 10.7 Sequential Queue Workflow
 
 > [!NOTE]
 > Deferred in INC-03; capability planned for INC-04.
 
-The workflow designer will support a controlled visual sequential model.
+Phase 1 workflow is intentionally simple, moving a Work Item Descriptor (WID) sequentially from one queue to another (e.g., Start → SOL Maker → SOL Checker → TFC Comp → TFC Auth → End).
 
 Users can:
+* Define sequential queue steps
+* Assign each step to a work queue
+* Configure step completion outcomes (e.g., Send, Approve, Reject, Send Back)
+* Configure queue-specific field rules (Visible/Hidden, Editable/Read-only, Mandatory/Optional) on the shared Form for that step
 
-* Add a human task
-* Name a task
-* Enter task instructions
-* Assign the task to a queue
-* Configure case status on entry
-* Configure editable properties
-* Configure required properties
-* Configure task due duration
-* Configure allowed outcomes
-* Configure the next step for each outcome
-* Move sequential steps
-* Identify the start and end
-
-Supported task outcomes:
-
-* Complete
-* Approve
-* Reject
-* Send Back
-
-Full BPMN modelling is excluded.
+Advanced workflow components (DB steps, custom API calls, timers/delays, automated decision nodes, script engines, notifications) are out of scope for Phase 1 implementation.
 
 ## 10.8 Document Type Designer
 
@@ -480,12 +466,13 @@ Full BPMN modelling is excluded.
 > Deferred in INC-03; capability planned for INC-09.
 
 Users can:
-
 * Create document types
 * Name document types
 * Mark a document type as required or optional
 * Allow one or multiple documents of a type
 * Associate document requirements with case creation or workflow steps
+
+Document Viewer and Document List are first-class WID processing page capabilities and belong to the runtime processing page layout, not inside the Form definition.
 
 ## 10.9 Validate and Publish
 
@@ -493,7 +480,6 @@ Users can:
 > Deferred in INC-03; capability planned for a later authorised publishing increment (INC-05). INC-03 provides optimistic concurrency revisioning (`expectedRevision` counter returning HTTP 409 Conflict on stale updates) for draft solution configurations.
 
 Users can:
-
 * Validate the complete configuration
 * View blocking validation errors
 * View non-blocking warnings
@@ -506,38 +492,30 @@ Future changes must be made through a new Draft version.
 
 ---
 
-# 11. Generic Runtime Portal scope
+# 11. Navigator & WID Processing Page Scope
 
-## 11.1 My Work Dashboard
+## 11.1 Navigator Entry & In Baskets
+* **Solution Entry**: Logging in and opening a Solution displays a clean work entry point (accessible In Baskets, Case Search, and Create Case where permitted). Opening a Solution does NOT automatically open the last-used queue.
+* **In Baskets**: In Baskets are Navigator-facing list views of WIDs currently in a queue. They are NOT a separate workflow engine. The Navigator displays only In Baskets corresponding to queues the logged-in user is authorized to access based on queue membership.
+* **Workspace Tabs**: Opening a WID from an In Basket opens the WID processing page. Multiple WIDs can remain open concurrently in Navigator workspace tabs.
+* **Case Search vs. WID Editing**: Searching opens Case Details in read-only mode. Editing business data occurs strictly through an active WID processing page, not through Case Search.
 
-The dashboard will include:
+## 11.2 Standard System-Defined WID Processing Page
+Phase 1 does NOT use a configurable Page Designer or per-step page templates. It uses a single system-defined default WID processing page.
+* **Page Layout**:
+  - Toolbar at top (WID actions: Send, Claim, Release, Approve, Reject, etc.)
+  - Document Viewer on left
+  - Shared Form/View on right (displaying the business data fields configured with step queue-context rules)
+  - Document List below the Form/View
+* **Form Boundary**: The Form represents strictly the business-data portion of the WID processing page, not the entire page layout.
 
-* My Claimed Tasks
-* Available Queue Tasks
-* Due Soon
-* Overdue
-* Recently Completed
-
-Users see tasks according to their solution roles and queue permissions.
-
-## 11.2 Case Creation
-
+## 11.3 Case Creation
 An authorised user can:
-
 * Select a published solution
-* Open the metadata-generated creation form
-* Enter required data
+* Open the case creation form
+* Enter required initial data
 * Upload permitted documents
-* Submit the case
-
-The system will:
-
-* Validate the submitted data
-* Generate a case number
-* Create the runtime case
-* Associate it with the exact published solution version
-* Set the initial case status
-* Create the first workflow task
+* Submit the case to instantiate the WID into the initial workflow queue
 * Record audit events
 
 ## 11.3 Case Workspace

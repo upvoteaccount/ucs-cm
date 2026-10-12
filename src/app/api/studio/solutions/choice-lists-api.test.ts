@@ -11,6 +11,7 @@ import { eq, and } from "drizzle-orm";
 import { GET as getChoiceListsHandler, POST as postChoiceListsHandler } from "./[id]/choice-lists/route";
 import { POST as postOptionsHandler } from "./[id]/choice-lists/[choiceListId]/options/route";
 import { POST as deactivateOptionHandler } from "./[id]/choice-lists/[choiceListId]/options/[optionId]/deactivate/route";
+import { POST as reactivateOptionHandler } from "./[id]/choice-lists/[choiceListId]/options/[optionId]/reactivate/route";
 import { PUT as reorderOptionsHandler } from "./[id]/choice-lists/[choiceListId]/options/reorder/route";
 import { NextRequest } from "next/server";
 
@@ -81,7 +82,7 @@ describe("INC-03C4 Choice Lists & Options API Integration Test Suite", () => {
     expect(postRes.status).toBe(201);
     const postJson = await postRes.json();
     expect(postJson.choiceList.id).toBeDefined();
-    expect(postJson.choiceList.key).toBe("workflow_states");
+    expect(postJson.choiceList.key).toBe("CLA_LIST_WORKFLOW_STATES");
     expect(postJson.solutionRevision).toBe(2);
 
     const getReq = new NextRequest(`http://localhost:3000/api/studio/solutions/${solutionId}/choice-lists`, {
@@ -170,6 +171,42 @@ describe("INC-03C4 Choice Lists & Options API Integration Test Suite", () => {
     expect(resDeactivate.status).toBe(200);
     const jsonDeactivate = await resDeactivate.json();
     expect(jsonDeactivate.option.isActive).toBe(false);
+
+    // Attempt to add a new option with same key as inactive option -> blocked with guidance
+    const postAddDupInactive = new NextRequest(`http://localhost:3000/api/studio/solutions/${solutionId}/choice-lists/${choiceList.id}/options`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${designerSessionToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        expectedRevision: 6,
+        key: "active",
+        label: "Active Status",
+      }),
+    });
+    const resAddDupInactive = await postOptionsHandler(postAddDupInactive, { params: Promise.resolve({ id: solutionId, choiceListId: choiceList.id }) });
+    expect(resAddDupInactive.status).toBe(409);
+    const jsonAddDupInactive = await resAddDupInactive.json();
+    expect(jsonAddDupInactive.error).toContain("An inactive option with this value already exists. Reactivate it instead.");
+
+    // Reactivate Option 1 -> preserves option ID and key
+    const postReactivate = new NextRequest(`http://localhost:3000/api/studio/solutions/${solutionId}/choice-lists/${choiceList.id}/options/${opt1Id}/reactivate`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${designerSessionToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        expectedRevision: 6,
+      }),
+    });
+    const resReactivate = await reactivateOptionHandler(postReactivate, { params: Promise.resolve({ id: solutionId, choiceListId: choiceList.id, optionId: opt1Id }) });
+    expect(resReactivate.status).toBe(200);
+    const jsonReactivate = await resReactivate.json();
+    expect(jsonReactivate.option.id).toBe(opt1Id);
+    expect(jsonReactivate.option.key).toBe("active");
+    expect(jsonReactivate.option.isActive).toBe(true);
   });
 
   it("denies access with HTTP 403 for runtime-only user and records AUDIT_ACCESS_DENIED audit", async () => {

@@ -99,23 +99,52 @@ export class SolutionRepository {
   }
 
   /**
-   * Provisions initial form record within a transaction.
+   * Provisions both system forms (Add Case Form & Case View Form) with exactly 1 Default Tab each.
    */
-  async createInitialFormInTx(
+  async createSystemFormsInTx(
     tx: DbTransaction,
     solutionId: string
-  ): Promise<{ id: string; formKey: string; name: string }> {
-    const [form] = await tx
+  ): Promise<{
+    addCaseForm: { id: string; formType: string; formKey: string; name: string };
+    caseViewForm: { id: string; formType: string; formKey: string; name: string };
+  }> {
+    const [addCaseForm] = await tx
       .insert(solutionForms)
       .values({
         solutionId,
-        formKey: "initial_form",
-        name: "Initial Form",
-        description: null,
+        formType: "ADD_CASE",
+        formKey: "add_case",
+        name: "Add Case Form",
+        description: "Used when creating a case.",
       })
       .returning();
 
-    return form;
+    await tx.insert(formTabs).values({
+      formId: addCaseForm.id,
+      tabKey: "tab_1",
+      title: "Default Tab",
+      displayOrder: 1,
+    });
+
+    const [caseViewForm] = await tx
+      .insert(solutionForms)
+      .values({
+        solutionId,
+        formType: "CASE_VIEW",
+        formKey: "case_view",
+        name: "Case View Form",
+        description: "Used when viewing and processing a case.",
+      })
+      .returning();
+
+    await tx.insert(formTabs).values({
+      formId: caseViewForm.id,
+      tabKey: "tab_1",
+      title: "Default Tab",
+      displayOrder: 1,
+    });
+
+    return { addCaseForm, caseViewForm };
   }
 
   /**
@@ -123,14 +152,15 @@ export class SolutionRepository {
    */
   async createDefaultTabInTx(
     tx: DbTransaction,
-    formId: string
+    formId: string,
+    title = "Default Tab"
   ): Promise<{ id: string; tabKey: string; title: string }> {
     const [tab] = await tx
       .insert(formTabs)
       .values({
         formId,
         tabKey: "tab_1",
-        title: "Main",
+        title,
         displayOrder: 1,
       })
       .returning();

@@ -1,25 +1,76 @@
 import { describe, it, expect } from "vitest";
-import { parseEnv } from "./index";
+import {
+  evaluateValidation,
+  getPublicRegexPresets,
+  getRegexPresetByKey,
+  VALIDATION_ERROR_CODES,
+  CanonicalValidationRules,
+} from "./index";
+import { ValidationError } from "../errors";
 
-describe("Shared Environment Validation", () => {
-  it("should validate valid environment configuration", () => {
-    const validRaw = {
-      NODE_ENV: "test",
-      PORT: "3000",
-      DATABASE_URL: "postgresql://user:pass@localhost:5432/db",
-      SESSION_SECRET: "super-secret-key-at-least-16-chars",
+describe("Shared Pure Validation Engine", () => {
+  it("evaluates regex preset correctly", () => {
+    const rules: CanonicalValidationRules = {
+      regexPreset: "LETTERS_ONLY",
     };
-    const parsed = parseEnv(validRaw);
-    expect(parsed.NODE_ENV).toBe("test");
-    expect(parsed.PORT).toBe(3000);
-    expect(parsed.SESSION_INACTIVITY_TIMEOUT_MINUTES).toBe(30);
+    const validRes = evaluateValidation("TEXT", rules, "HelloWorld");
+    expect(validRes.isValid).toBe(true);
+    expect(validRes.errors).toHaveLength(0);
+
+    const invalidRes = evaluateValidation("TEXT", rules, "Hello123");
+    expect(invalidRes.isValid).toBe(false);
+    expect(invalidRes.errors[0].code).toBe(VALIDATION_ERROR_CODES.REGEX_MISMATCH);
   });
 
-  it("should throw ValidationError if DATABASE_URL is missing", () => {
-    const invalidRaw = {
-      NODE_ENV: "test",
-      SESSION_SECRET: "super-secret-key-at-least-16-chars",
+  it("evaluates custom regex correctly", () => {
+    const rules: CanonicalValidationRules = {
+      customRegex: { pattern: "^[A-Z]{3}$" },
     };
-    expect(() => parseEnv(invalidRaw)).toThrow("Environment validation failed");
+    const validRes = evaluateValidation("TEXT", rules, "ABC");
+    expect(validRes.isValid).toBe(true);
+
+    const invalidRes = evaluateValidation("TEXT", rules, "abcd");
+    expect(invalidRes.isValid).toBe(false);
+  });
+
+  it("evaluates minLength and maxLength", () => {
+    const rules: CanonicalValidationRules = {
+      minLength: 3,
+      maxLength: 6,
+    };
+    expect(evaluateValidation("TEXT", rules, "hi").isValid).toBe(false);
+    expect(evaluateValidation("TEXT", rules, "toolonghere").isValid).toBe(false);
+    expect(evaluateValidation("TEXT", rules, "hello").isValid).toBe(true);
+  });
+
+  it("evaluates number ranges", () => {
+    const rules: CanonicalValidationRules = {
+      minimumValue: 10,
+      maximumValue: 100,
+    };
+    expect(evaluateValidation("NUMBER", rules, 5).isValid).toBe(false);
+    expect(evaluateValidation("NUMBER", rules, 150).isValid).toBe(false);
+    expect(evaluateValidation("NUMBER", rules, 50).isValid).toBe(true);
+  });
+
+  it("enforces 2000 character sampleValue limit", () => {
+    const rules: CanonicalValidationRules = { minLength: 1 };
+    const longValue = "A".repeat(2001);
+    expect(() => evaluateValidation("TEXT", rules, longValue)).toThrow(ValidationError);
+  });
+
+  it("returns presets metadata without leaking internal pattern", () => {
+    const publicPresets = getPublicRegexPresets();
+    expect(publicPresets.length).toBeGreaterThan(0);
+    for (const p of publicPresets) {
+      expect((p as any).pattern).toBeUndefined();
+      expect(p.key).toBeDefined();
+    }
+  });
+
+  it("retrieves full internal preset by key", () => {
+    const preset = getRegexPresetByKey("INDIAN_MOBILE");
+    expect(preset).not.toBeNull();
+    expect(preset?.pattern).toBe("^[6-9]\\d{9}$");
   });
 });

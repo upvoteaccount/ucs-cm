@@ -238,6 +238,7 @@ export function LoginForm() {
               <Button
                 type="submit"
                 variant="primary"
+                isFullWidth
                 isPending={isPending}
                 pendingText="Signing in..."
                 disabled={isPending}

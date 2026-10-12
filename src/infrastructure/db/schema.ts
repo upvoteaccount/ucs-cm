@@ -228,6 +228,7 @@ export const solutionProperties = pgTable(
     defaultValue: text("default_value"),
     helpText: text("help_text"),
     isSensitive: boolean("is_sensitive").default(false).notNull(),
+    defaultControlType: varchar("default_control_type", { length: 32 }),
     validationRules: jsonb("validation_rules").default({}).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -246,12 +247,16 @@ export const solutionProperties = pgTable(
     check("chk_prop_stored_data_type", sql`stored_data_type IN ('TEXT', 'NUMBER', 'BOOLEAN', 'DATE', 'DATETIME', 'USER_REFERENCE')`),
     check("chk_prop_format_preset", sql`format_preset IN ('NONE', 'EMAIL', 'PHONE')`),
     check("chk_prop_cardinality", sql`cardinality IN ('SINGLE', 'MULTIPLE')`),
-    check("chk_prop_local_name", sql`local_symbolic_name ~ '^[a-z][a-z0-9_]{0,52}$'`),
+    check("chk_prop_local_name", sql`local_symbolic_name ~ '^[a-zA-Z][a-zA-Z0-9_]{0,52}$'`),
     check("chk_prop_tech_name_len", sql`length(generated_technical_name) <= 64`),
+    check(
+      "chk_prop_default_control_type",
+      sql`default_control_type IS NULL OR default_control_type IN ('TEXT_INPUT', 'TEXTAREA', 'NUMBER_INPUT', 'DATE_PICKER', 'DATETIME_PICKER', 'CHECKBOX', 'YES_NO', 'DROPDOWN', 'RADIO', 'MULTI_SELECT_DROPDOWN', 'CHECKBOXES')`
+    ),
   ]
 );
 
-// 12. Solution Forms Table (Enforces exactly 1 initial_form per Solution for INC-03)
+// 12. Solution Forms Table (Dual system forms: ADD_CASE and CASE_VIEW, extensible for future CUSTOM)
 export const solutionForms = pgTable(
   "solution_forms",
   {
@@ -259,8 +264,9 @@ export const solutionForms = pgTable(
     solutionId: uuid("solution_id")
       .notNull()
       .references(() => solutions.id, { onDelete: "cascade" }),
-    formKey: varchar("form_key", { length: 64 }).default("initial_form").notNull(),
-    name: varchar("name", { length: 255 }).default("Initial Form").notNull(),
+    formType: varchar("form_type", { length: 32 }).notNull(),
+    formKey: varchar("form_key", { length: 64 }).notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -268,8 +274,12 @@ export const solutionForms = pgTable(
   (table) => [
     unique("uq_forms_id_sol").on(table.id, table.solutionId),
     uniqueIndex("uq_forms_solution_key").on(table.solutionId, table.formKey),
+    uniqueIndex("uq_forms_solution_type").on(table.solutionId, table.formType),
     index("idx_forms_solution").on(table.solutionId),
-    check("chk_initial_form_key", sql`form_key = 'initial_form'`),
+    check(
+      "chk_solution_form_type",
+      sql`form_type IN ('ADD_CASE', 'CASE_VIEW', 'CUSTOM')`
+    ),
   ]
 );
 
@@ -342,6 +352,7 @@ export const formFieldReferences = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    unique("uq_field_refs_id_form").on(table.id, table.formId),
     uniqueIndex("uq_field_refs_form_property").on(table.formId, table.propertyId),
     uniqueIndex("uq_field_refs_section_order").on(table.sectionId, table.displayOrder),
     index("idx_field_refs_property").on(table.propertyId),
@@ -362,5 +373,88 @@ export const formFieldReferences = pgTable(
     }).onDelete("restrict"),
     check("chk_field_ref_control_type", sql`control_type IN ('TEXT_INPUT', 'TEXTAREA', 'DROPDOWN', 'RADIO', 'CHECKBOX', 'DATE_PICKER', 'DATETIME_PICKER', 'USER_PICKER', 'NUMBER_INPUT')`),
     check("chk_field_refs_order", sql`display_order > 0`),
+  ]
+);
+
+// 16. Solution Work Queues Table
+export const solutionQueues = pgTable(
+  "solution_queues",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    solutionId: uuid("solution_id")
+      .notNull()
+      .references(() => solutions.id, { onDelete: "cascade" }),
+    queueKey: varchar("queue_key", { length: 64 }).notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    description: text("description"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("uq_queues_id_sol").on(table.id, table.solutionId),
+    uniqueIndex("uq_queues_solution_key").on(table.solutionId, table.queueKey),
+    index("idx_queues_solution").on(table.solutionId),
+    check("chk_queue_key_format", sql`queue_key ~ '^[A-Z][A-Z0-9_]{0,63}$'`),
+  ]
+);
+
+// 17. Queue User Assignments Table
+export const queueUserAssignments = pgTable(
+  "queue_user_assignments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    solutionId: uuid("solution_id").notNull(),
+    queueId: uuid("queue_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    assignedAt: timestamp("assigned_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_queue_user_assignment").on(table.queueId, table.userId),
+    index("idx_queue_assignments_queue").on(table.queueId),
+    index("idx_queue_assignments_user").on(table.userId),
+    foreignKey({
+      columns: [table.queueId, table.solutionId],
+      foreignColumns: [solutionQueues.id, solutionQueues.solutionId],
+      name: "fk_queue_user_assign_queue_sol",
+    }).onDelete("cascade"),
+  ]
+);
+
+// 18. Form Field Queue Rules Table
+export const formFieldQueueRules = pgTable(
+  "form_field_queue_rules",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    solutionId: uuid("solution_id").notNull(),
+    formId: uuid("form_id").notNull(),
+    fieldReferenceId: uuid("field_reference_id").notNull(),
+    queueId: uuid("queue_id").notNull(),
+    isVisible: boolean("is_visible").notNull().default(true),
+    isEditable: boolean("is_editable").notNull().default(true),
+    isRequired: boolean("is_required").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_queue_rules_field_queue").on(table.fieldReferenceId, table.queueId),
+    index("idx_queue_rules_form").on(table.formId),
+    index("idx_queue_rules_queue").on(table.queueId),
+    foreignKey({
+      columns: [table.fieldReferenceId, table.formId],
+      foreignColumns: [formFieldReferences.id, formFieldReferences.formId],
+      name: "fk_queue_rules_field_same_form",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.queueId, table.solutionId],
+      foreignColumns: [solutionQueues.id, solutionQueues.solutionId],
+      name: "fk_queue_rules_queue_same_sol",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.formId, table.solutionId],
+      foreignColumns: [solutionForms.id, solutionForms.solutionId],
+      name: "fk_queue_rules_form_same_sol",
+    }).onDelete("cascade"),
   ]
 );

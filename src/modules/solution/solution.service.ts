@@ -84,13 +84,10 @@ export class SolutionService {
           solutionPrefix: cleanPrefix,
         });
 
-        // 2. Provision initial form
-        const form = await solutionRepository.createInitialFormInTx(tx, solution.id);
+        // 2. Provision system forms (Add Case Form & Case View Form) with default tabs
+        const forms = await solutionRepository.createSystemFormsInTx(tx, solution.id);
 
-        // 3. Provision default tab
-        await solutionRepository.createDefaultTabInTx(tx, form.id);
-
-        // 4. Record SOLUTION_CREATED audit event in the same transaction
+        // 3. Record SOLUTION_CREATED audit event in the same transaction
         await tx.insert(auditEvents).values({
           organisationId: orgId,
           category: "ORG",
@@ -108,7 +105,10 @@ export class SolutionService {
             revision: solution.revision,
           },
           metadata: {
-            provisionedFormKey: "initial_form",
+            provisionedForms: [
+              { formId: forms.addCaseForm.id, formType: "ADD_CASE", formKey: "add_case" },
+              { formId: forms.caseViewForm.id, formType: "CASE_VIEW", formKey: "case_view" },
+            ],
           },
         });
 

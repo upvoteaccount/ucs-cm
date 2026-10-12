@@ -82,3 +82,43 @@ export async function PATCH(
     );
   }
 }
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string; choiceListId: string }> }
+) {
+  try {
+    const { id: solutionId, choiceListId } = await params;
+    const context = await requirePlatformRoles(req, [
+      PLATFORM_ROLES.SOLUTION_DESIGNER,
+      PLATFORM_ROLES.PLATFORM_ADMIN,
+    ]);
+
+    const url = new URL(req.url);
+    const expectedRevisionParam = url.searchParams.get("expectedRevision");
+    const expectedRevision = expectedRevisionParam ? parseInt(expectedRevisionParam, 10) : undefined;
+
+    if (expectedRevision === undefined || isNaN(expectedRevision)) {
+      throw new ValidationError("expectedRevision query parameter is required.");
+    }
+
+    const result = await choiceListService.deleteChoiceList(
+      solutionId,
+      choiceListId,
+      { expectedRevision },
+      context
+    );
+    return NextResponse.json(result);
+  } catch (err: unknown) {
+    if (err instanceof AppError) {
+      return NextResponse.json(
+        { error: err.message, code: err.code, details: err.details },
+        { status: err.statusCode }
+      );
+    }
+    return NextResponse.json(
+      { error: "Internal server error", code: "INTERNAL_ERROR" },
+      { status: 500 }
+    );
+  }
+}

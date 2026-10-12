@@ -4,7 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom";
 
-import LandingPage from "./landing/page";
+import { LandingPageContent } from "./landing/page";
 import ForbiddenPage from "./forbidden/page";
 import Loading from "./loading";
 import NotFound from "../not-found";
@@ -40,7 +40,7 @@ describe("Stage E Authenticated Shell & Page Suite", () => {
             roles: ["PLATFORM_ADMIN", "SOLUTION_DESIGNER"],
           }}
         >
-          <LandingPage />
+          <LandingPageContent roles={["PLATFORM_ADMIN", "SOLUTION_DESIGNER"]} />
         </AppShell>
       );
 
@@ -375,11 +375,11 @@ describe("Stage E Authenticated Layout Server Component Boundary Suite", () => {
   });
 
   it("verifies production landing page content contains no hardcoded synthetic fixture identity", () => {
-    render(<LandingPage />);
+    render(<LandingPageContent roles={["PLATFORM_ADMIN"]} />);
 
     expect(screen.getByRole("heading", { level: 1, name: "Welcome to UCS CM" })).toBeInTheDocument();
-    expect(screen.getByText("Your case management workspace.")).toBeInTheDocument();
-    expect(screen.getByText("Available product areas will appear here based on your access.")).toBeInTheDocument();
+    expect(screen.getByText(/Your case management workspace\./)).toBeInTheDocument();
+    expect(screen.getByText("Open Design Studio")).toBeInTheDocument();
 
     // Verify zero hardcoded synthetic identities in production landing content
     expect(screen.queryByText("Aarav Mehta")).not.toBeInTheDocument();

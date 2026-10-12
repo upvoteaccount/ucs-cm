@@ -44,3 +44,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# private demo documents (never commit)
+public/demo-documents/private/
+test-evidence/

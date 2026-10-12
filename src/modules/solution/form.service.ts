@@ -3,8 +3,10 @@ import { auditEvents } from "../../infrastructure/db/schema";
 import { SessionContext } from "../auth";
 import { solutionRepository } from "./solution.repository";
 import { solutionPropertyRepository } from "./solution-property.repository";
+import { solutionQueueRepository } from "./queue.repository";
 import {
   formRepository,
+  FormRow,
   FormAggregate,
   FormTabRow,
   FormSectionRow,
@@ -117,19 +119,51 @@ export function validateStaticFieldStates(input: {
 
 export class FormService {
   /**
-   * Reads full Form aggregate for a Solution.
+   * Resolves form by ID or falls back to initial/case_view form.
    */
-  async getFormAggregate(
+  async resolveForm(solutionId: string, orgId: string, formId?: string): Promise<FormRow> {
+    const form = formId
+      ? await formRepository.findFormById(formId, solutionId, orgId)
+      : await formRepository.findInitialFormBySolution(solutionId, orgId);
+    if (!form) throw new NotFoundError("Form not found for this Solution");
+    return form;
+  }
+
+  /**
+   * Lists all forms for a Solution.
+   */
+  async listForms(
     solutionId: string,
     context: SessionContext
-  ): Promise<{ formAggregate: FormAggregate; solutionRevision: number }> {
+  ): Promise<{ forms: FormRow[]; solutionRevision: number }> {
     const orgId = context.activeOrganisation.id;
     const solution = await solutionRepository.findById(solutionId, orgId);
     if (!solution) {
       throw new NotFoundError("Solution not found");
     }
 
-    const agg = await formRepository.getFormAggregate(solutionId, orgId);
+    const forms = await formRepository.listFormsBySolution(solutionId, orgId);
+    return { forms, solutionRevision: solution.revision };
+  }
+
+  /**
+   * Reads full Form aggregate for a Solution (optionally for a specific formId).
+   */
+  async getFormAggregate(
+    solutionId: string,
+    formIdOrContext: string | SessionContext,
+    contextArg?: SessionContext
+  ): Promise<{ formAggregate: FormAggregate; solutionRevision: number }> {
+    const formId = typeof formIdOrContext === "string" ? formIdOrContext : undefined;
+    const context = (typeof formIdOrContext === "string" ? contextArg : formIdOrContext) as SessionContext;
+
+    const orgId = context.activeOrganisation.id;
+    const solution = await solutionRepository.findById(solutionId, orgId);
+    if (!solution) {
+      throw new NotFoundError("Solution not found");
+    }
+
+    const agg = await formRepository.getFormAggregate(solutionId, orgId, formId);
     if (!agg) {
       throw new NotFoundError("Form not found for this Solution");
     }
@@ -137,11 +171,364 @@ export class FormService {
     return { formAggregate: agg, solutionRevision: solution.revision };
   }
 
-  // --- TAB OPERATIONS ---
+  /**
+   * Canonical Whole-Form Aggregate Save:
+   * Validates layout invariants, locks solution revision, atomically synchronizes tabs/sections/fields,
+   * records FORM_LAYOUT_SAVED audit event with change details, and returns updated FormAggregate.
+   */
+  async saveFormAggregate(
+    solutionId: string,
+    formId: string,
+    input: {
+      expectedRevision: number;
+      tabs: { id?: string; key?: string; title: string; displayOrder?: number }[];
+      sections: { id?: string; tabId: string; key?: string; title: string; displayOrder?: number }[];
+      fields: {
+        id?: string;
+        sectionId: string;
+        propertyId: string;
+        controlType: string;
+        isVisible?: boolean;
+        isEditable?: boolean;
+        isRequired?: boolean;
+        displayOrder?: number;
+      }[];
+      queueRules?: {
+        fieldReferenceId: string;
+        queueId: string;
+        isVisible?: boolean;
+        isEditable?: boolean;
+        isRequired?: boolean;
+      }[];
+    },
+    context: SessionContext
+  ): Promise<{ formAggregate: FormAggregate; solutionRevision: number }> {
+    if (typeof input.expectedRevision !== "number" || !Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) {
+      throw new ValidationError("expectedRevision is required and must be a positive integer.");
+    }
+    if (!Array.isArray(input.tabs) || input.tabs.length === 0) {
+      throw new ValidationError("Form must contain at least one tab.");
+    }
+    if (!Array.isArray(input.sections)) {
+      throw new ValidationError("sections array is required.");
+    }
+    if (!Array.isArray(input.fields)) {
+      throw new ValidationError("fields array is required.");
+    }
+
+    const orgId = context.activeOrganisation.id;
+    const solution = await solutionRepository.findById(solutionId, orgId);
+    if (!solution) {
+      throw new NotFoundError("Solution not found");
+    }
+
+    const form = await formRepository.findFormById(formId, solutionId, orgId);
+    if (!form) {
+      throw new NotFoundError("Form not found for this Solution");
+    }
+
+    // 1. Validate tabs
+    for (const t of input.tabs) {
+      if (!t.title || typeof t.title !== "string" || !t.title.trim()) {
+        throw new ValidationError("Tab title cannot be empty.");
+      }
+    }
+
+    // Tab ID/key index for resolving section parent
+    const submittedTabKeys = new Set(input.tabs.map((t) => t.id || t.key).filter(Boolean));
+
+    // 2. Validate sections
+    for (const s of input.sections) {
+      if (!s.title || typeof s.title !== "string" || !s.title.trim()) {
+        throw new ValidationError("Section title cannot be empty.");
+      }
+      if (!s.tabId || !submittedTabKeys.has(s.tabId)) {
+        throw new ValidationError(`Section '${s.title}' references an invalid or missing tab.`);
+      }
+    }
+
+    const submittedSecKeys = new Set(input.sections.map((s) => s.id || s.key).filter(Boolean));
+
+    // 3. Validate fields
+    // Fetch all solution properties for ownership & compatibility checks
+    const solProperties = await solutionPropertyRepository.listBySolution(solutionId, orgId);
+    const propMap = new Map<string, any>(solProperties.map((p: any) => [p.id, p]));
+
+    // Check per-form property uniqueness
+    const seenPropertyIds = new Set<string>();
+
+    for (const f of input.fields) {
+      if (!f.sectionId || !submittedSecKeys.has(f.sectionId)) {
+        throw new ValidationError("Field references an invalid or missing section.");
+      }
+      if (!f.propertyId || !propMap.has(f.propertyId)) {
+        throw new ValidationError(`Property ${f.propertyId} not found in this Solution.`);
+      }
+      if (seenPropertyIds.has(f.propertyId)) {
+        const propLabel = propMap.get(f.propertyId)?.label || f.propertyId;
+        throw new ConflictError(`Property '${propLabel}' is already placed on this form.`);
+      }
+      seenPropertyIds.add(f.propertyId);
+
+      const prop = propMap.get(f.propertyId)!;
+      validateControlCompatibility(prop, f.controlType);
+
+      if (f.isVisible !== undefined && typeof f.isVisible !== "boolean") {
+        throw new ValidationError("isVisible must be a boolean.");
+      }
+      if (f.isEditable !== undefined && typeof f.isEditable !== "boolean") {
+        throw new ValidationError("isEditable must be a boolean.");
+      }
+      if (f.isRequired !== undefined && typeof f.isRequired !== "boolean") {
+        throw new ValidationError("isRequired must be a boolean.");
+      }
+      if (form.formType === "CASE_VIEW" && f.isRequired) {
+        throw new ValidationError("Case View Form does not support static mandatory configuration. Mandatory behaviour must be configured per queue.");
+      }
+    }
+
+    // 4. Validate queueRules
+    if (form.formType === "ADD_CASE") {
+      if (input.queueRules && input.queueRules.length > 0) {
+        throw new ValidationError("Add Case Form does not support queue-specific behaviour rules.");
+      }
+    } else if (form.formType === "CASE_VIEW") {
+      if (input.queueRules !== undefined) {
+        if (!Array.isArray(input.queueRules)) {
+          throw new ValidationError("queueRules must be an array.");
+        }
+        const solQueues = await solutionQueueRepository.listBySolution(solutionId, orgId);
+        const validQueueIds = new Set(solQueues.map((q) => q.id));
+        const validFieldIdentifiers = new Set(
+          input.fields.map((f) => f.id).filter((id): id is string => !!id)
+        );
+        const seenFieldQueuePairs = new Set<string>();
+
+        for (const qr of input.queueRules) {
+          if (!qr.queueId || !validQueueIds.has(qr.queueId)) {
+            throw new ValidationError("Queue rule references an invalid or missing queue in this Solution.");
+          }
+          if (
+            !qr.fieldReferenceId ||
+            (!validFieldIdentifiers.has(qr.fieldReferenceId) &&
+              !input.fields.some((f) => f.id === qr.fieldReferenceId))
+          ) {
+            throw new ValidationError("Queue rule references an invalid or missing field reference.");
+          }
+          const pairKey = `${qr.fieldReferenceId}:${qr.queueId}`;
+          if (seenFieldQueuePairs.has(pairKey)) {
+            throw new ConflictError("Duplicate queue rule for field reference and queue.");
+          }
+          seenFieldQueuePairs.add(pairKey);
+
+          if (qr.isVisible !== undefined && typeof qr.isVisible !== "boolean") {
+            throw new ValidationError("isVisible must be a boolean.");
+          }
+          if (qr.isEditable !== undefined && typeof qr.isEditable !== "boolean") {
+            throw new ValidationError("isEditable must be a boolean.");
+          }
+          if (qr.isRequired !== undefined && typeof qr.isRequired !== "boolean") {
+            throw new ValidationError("isRequired must be a boolean.");
+          }
+        }
+      }
+    }
+
+    const db = getDb();
+    return await db.transaction(async (tx) => {
+      // 5. Baseline aggregate before changes (for diffing)
+      const baselineAgg = await formRepository.getFormAggregate(solutionId, orgId, formId, tx);
+      if (!baselineAgg) {
+        throw new NotFoundError("Form not found for this Solution");
+      }
+
+      // 6. Optimistic concurrency check & solution revision increment
+      const updatedSolution = await solutionRepository.updateSolutionInTx(
+        tx,
+        solutionId,
+        orgId,
+        input.expectedRevision,
+        {}
+      );
+      if (!updatedSolution) {
+        throw new ConflictError("Stale update rejected: Solution revision conflict.", {
+          expectedRevision: input.expectedRevision,
+        });
+      }
+
+      // 7. Synchronize full form aggregate
+      const savedAgg = await formRepository.saveFormAggregateInTx(
+        tx,
+        solutionId,
+        orgId,
+        formId,
+        input
+      );
+
+      // 8. Calculate change details for audit
+      const baseTabIds = new Set(baselineAgg.tabs.map((t) => t.id));
+      const baseSecIds = new Set(baselineAgg.sections.map((s) => s.id));
+      const baseFieldIds = new Set(baselineAgg.fields.map((f) => f.id));
+
+      const submittedTabIds = new Set(input.tabs.map((t) => t.id).filter((id): id is string => !!id && baseTabIds.has(id)));
+      const submittedSecIds = new Set(input.sections.map((s) => s.id).filter((id): id is string => !!id && baseSecIds.has(id)));
+      const submittedFieldIds = new Set(input.fields.map((f) => f.id).filter((id): id is string => !!id && baseFieldIds.has(id)));
+
+      let tabsAdded = 0;
+      let tabsRemoved = 0;
+      let tabsRenamed = 0;
+      for (const t of input.tabs) {
+        if (!t.id || !baseTabIds.has(t.id)) tabsAdded++;
+        else {
+          const old = baselineAgg.tabs.find((bt) => bt.id === t.id);
+          if (old && old.title !== t.title.trim()) tabsRenamed++;
+        }
+      }
+      for (const bt of baselineAgg.tabs) {
+        if (!submittedTabIds.has(bt.id)) tabsRemoved++;
+      }
+
+      let sectionsAdded = 0;
+      let sectionsRemoved = 0;
+      let sectionsRenamed = 0;
+      let sectionsMoved = 0;
+      for (const s of input.sections) {
+        if (!s.id || !baseSecIds.has(s.id)) sectionsAdded++;
+        else {
+          const old = baselineAgg.sections.find((bs) => bs.id === s.id);
+          if (old) {
+            if (old.title !== s.title.trim()) sectionsRenamed++;
+            if (old.tabId !== s.tabId) sectionsMoved++;
+          }
+        }
+      }
+      for (const bs of baselineAgg.sections) {
+        if (!submittedSecIds.has(bs.id)) sectionsRemoved++;
+      }
+
+      let fieldsAdded = 0;
+      let fieldsRemoved = 0;
+      let fieldsMoved = 0;
+      let fieldsConfigured = 0;
+      for (const f of input.fields) {
+        if (!f.id || !baseFieldIds.has(f.id)) fieldsAdded++;
+        else {
+          const old = baselineAgg.fields.find((bf) => bf.id === f.id);
+          if (old) {
+            if (old.sectionId !== f.sectionId) fieldsMoved++;
+            const controlChanged = old.controlType !== f.controlType;
+            const reqChanged = f.isRequired !== undefined && old.isRequired !== f.isRequired;
+            const visChanged = f.isVisible !== undefined && old.isVisible !== f.isVisible;
+            const editChanged = f.isEditable !== undefined && old.isEditable !== f.isEditable;
+            if (controlChanged || reqChanged || visChanged || editChanged) {
+              fieldsConfigured++;
+            }
+          }
+        }
+      }
+      for (const bf of baselineAgg.fields) {
+        if (!submittedFieldIds.has(bf.id)) fieldsRemoved++;
+      }
+
+      // 9. Calculate queue rules changes for audit
+      const baseRuleMap = new Map(
+        baselineAgg.queueRules.map((r) => [`${r.fieldReferenceId}:${r.queueId}`, r])
+      );
+      const savedRuleMap = new Map(
+        savedAgg.queueRules.map((r) => [`${r.fieldReferenceId}:${r.queueId}`, r])
+      );
+
+      const allRuleKeys = new Set([...baseRuleMap.keys(), ...savedRuleMap.keys()]);
+      const queueRulesChanged: Array<{
+        queueId: string;
+        fieldReferenceId: string;
+        previousEffectiveBehaviour: { isVisible: boolean; isEditable: boolean; isRequired: boolean };
+        newEffectiveBehaviour: { isVisible: boolean; isEditable: boolean; isRequired: boolean };
+      }> = [];
+
+      for (const key of allRuleKeys) {
+        const bRule = baseRuleMap.get(key);
+        const sRule = savedRuleMap.get(key);
+
+        const prevEff = {
+          isVisible: bRule?.isVisible ?? true,
+          isEditable: bRule?.isEditable ?? true,
+          isRequired: bRule?.isRequired ?? false,
+        };
+        const newEff = {
+          isVisible: sRule?.isVisible ?? true,
+          isEditable: sRule?.isEditable ?? true,
+          isRequired: sRule?.isRequired ?? false,
+        };
+
+        if (
+          prevEff.isVisible !== newEff.isVisible ||
+          prevEff.isEditable !== newEff.isEditable ||
+          prevEff.isRequired !== newEff.isRequired
+        ) {
+          const [fieldRefId, queueId] = key.split(":");
+          queueRulesChanged.push({
+            queueId,
+            fieldReferenceId: fieldRefId,
+            previousEffectiveBehaviour: prevEff,
+            newEffectiveBehaviour: newEff,
+          });
+        }
+      }
+
+      // 10. Record single top-level FORM_LAYOUT_SAVED audit event
+      await tx.insert(auditEvents).values({
+        organisationId: orgId,
+        category: "ORG",
+        eventType: "FORM_LAYOUT_SAVED",
+        actorType: "AUTHENTICATED_USER",
+        actorUserId: context.user.id,
+        actorIdentifier: context.user.email,
+        entityType: "SOLUTION_FORM",
+        entityId: form.id,
+        beforeState: {
+          tabCount: baselineAgg.tabs.length,
+          sectionCount: baselineAgg.sections.length,
+          fieldCount: baselineAgg.fields.length,
+          queueRuleCount: baselineAgg.queueRules.length,
+        },
+        afterState: {
+          tabCount: savedAgg.tabs.length,
+          sectionCount: savedAgg.sections.length,
+          fieldCount: savedAgg.fields.length,
+          queueRuleCount: savedAgg.queueRules.length,
+        },
+        metadata: {
+          formId: form.id,
+          formType: form.formType,
+          formKey: form.formKey,
+          expectedRevision: input.expectedRevision,
+          newSolutionRevision: updatedSolution.revision,
+          changeSummary: {
+            tabsAdded,
+            tabsRemoved,
+            tabsRenamed,
+            sectionsAdded,
+            sectionsRemoved,
+            sectionsRenamed,
+            sectionsMoved,
+            fieldsAdded,
+            fieldsRemoved,
+            fieldsMoved,
+            fieldsConfigured,
+            queueRulesChanged: queueRulesChanged.length,
+          },
+          ...(queueRulesChanged.length > 0 ? { queueRulesChanged } : {}),
+        },
+      });
+
+      return { formAggregate: savedAgg, solutionRevision: updatedSolution.revision };
+    });
+  }
 
   async createTab(
     solutionId: string,
-    input: { expectedRevision: number; key?: string; title: string },
+    input: { formId?: string; expectedRevision: number; key?: string; title: string },
     context: SessionContext
   ): Promise<{ tab: FormTabRow; solutionRevision: number }> {
     if (typeof input.expectedRevision !== "number" || !Number.isInteger(input.expectedRevision)) {
@@ -152,8 +539,7 @@ export class FormService {
     }
 
     const orgId = context.activeOrganisation.id;
-    const agg = await formRepository.getFormAggregate(solutionId, orgId);
-    if (!agg) throw new NotFoundError("Solution or Form not found");
+    const form = await this.resolveForm(solutionId, orgId, input.formId);
 
     const key = input.key ? validateSymbolicKey(input.key, "Tab key") : `tab_${Math.random().toString(36).substring(7)}`;
 
@@ -167,9 +553,9 @@ export class FormService {
           throw new ConflictError("Stale update rejected: Solution revision conflict.", { expectedRevision: input.expectedRevision });
         }
 
-        const maxOrder = await formRepository.getMaxTabDisplayOrderInTx(tx, agg.form.id);
+        const maxOrder = await formRepository.getMaxTabDisplayOrderInTx(tx, form.id);
         const tab = await formRepository.createTabInTx(tx, {
-          formId: agg.form.id,
+          formId: form.id,
           key,
           title: input.title.trim(),
           displayOrder: maxOrder + 1,
@@ -203,7 +589,7 @@ export class FormService {
   async updateTab(
     solutionId: string,
     tabId: string,
-    input: { expectedRevision: number; title: string },
+    input: { formId?: string; expectedRevision: number; title: string },
     context: SessionContext
   ): Promise<{ tab: FormTabRow; solutionRevision: number }> {
     if (typeof input.expectedRevision !== "number" || !Number.isInteger(input.expectedRevision)) {
@@ -214,10 +600,9 @@ export class FormService {
     }
 
     const orgId = context.activeOrganisation.id;
-    const agg = await formRepository.getFormAggregate(solutionId, orgId);
-    if (!agg) throw new NotFoundError("Solution or Form not found");
+    const form = await this.resolveForm(solutionId, orgId, input.formId);
 
-    const currentTab = await formRepository.findTabById(tabId, agg.form.id);
+    const currentTab = await formRepository.findTabById(tabId, form.id);
     if (!currentTab) throw new NotFoundError("Tab not found");
 
     const db = getDb();
@@ -229,7 +614,7 @@ export class FormService {
         throw new ConflictError("Stale update rejected: Solution revision conflict.", { expectedRevision: input.expectedRevision });
       }
 
-      const tab = await formRepository.updateTabInTx(tx, tabId, agg.form.id, input.title.trim());
+      const tab = await formRepository.updateTabInTx(tx, tabId, form.id, input.title.trim());
       if (!tab) throw new NotFoundError("Tab not found");
 
       await tx.insert(auditEvents).values({
@@ -253,7 +638,7 @@ export class FormService {
   async deleteTab(
     solutionId: string,
     tabId: string,
-    input: { expectedRevision: number },
+    input: { formId?: string; expectedRevision: number },
     context: SessionContext
   ): Promise<{ success: boolean; solutionRevision: number }> {
     if (typeof input.expectedRevision !== "number" || !Number.isInteger(input.expectedRevision)) {
@@ -261,13 +646,12 @@ export class FormService {
     }
 
     const orgId = context.activeOrganisation.id;
-    const agg = await formRepository.getFormAggregate(solutionId, orgId);
-    if (!agg) throw new NotFoundError("Solution or Form not found");
+    const form = await this.resolveForm(solutionId, orgId, input.formId);
 
-    const tab = await formRepository.findTabById(tabId, agg.form.id);
+    const tab = await formRepository.findTabById(tabId, form.id);
     if (!tab) throw new NotFoundError("Tab not found");
 
-    const totalTabs = await formRepository.countTabsInForm(agg.form.id);
+    const totalTabs = await formRepository.countTabsInForm(form.id);
     if (totalTabs <= 1) {
       throw new ConflictError("Cannot delete the only remaining tab in the form.");
     }
@@ -286,7 +670,7 @@ export class FormService {
         throw new ConflictError("Stale update rejected: Solution revision conflict.", { expectedRevision: input.expectedRevision });
       }
 
-      await formRepository.deleteTabInTx(tx, tabId, agg.form.id);
+      await formRepository.deleteTabInTx(tx, tabId, form.id);
 
       await tx.insert(auditEvents).values({
         organisationId: orgId,
@@ -307,7 +691,7 @@ export class FormService {
 
   async reorderTabs(
     solutionId: string,
-    input: { expectedRevision: number; tabIds: string[] },
+    input: { formId?: string; expectedRevision: number; tabIds: string[] },
     context: SessionContext
   ): Promise<{ tabs: FormTabRow[]; solutionRevision: number }> {
     if (typeof input.expectedRevision !== "number" || !Number.isInteger(input.expectedRevision)) {
@@ -318,7 +702,8 @@ export class FormService {
     }
 
     const orgId = context.activeOrganisation.id;
-    const agg = await formRepository.getFormAggregate(solutionId, orgId);
+    const form = await this.resolveForm(solutionId, orgId, input.formId);
+    const agg = await formRepository.getFormAggregate(solutionId, orgId, form.id);
     if (!agg) throw new NotFoundError("Solution or Form not found");
 
     const existingTabs = agg.tabs;
@@ -342,7 +727,7 @@ export class FormService {
         throw new ConflictError("Stale update rejected: Solution revision conflict.", { expectedRevision: input.expectedRevision });
       }
 
-      const reordered = await formRepository.reorderTabsInTx(tx, agg.form.id, input.tabIds);
+      const reordered = await formRepository.reorderTabsInTx(tx, form.id, input.tabIds);
 
       await tx.insert(auditEvents).values({
         organisationId: orgId,
@@ -352,11 +737,11 @@ export class FormService {
         actorUserId: context.user.id,
         actorIdentifier: context.user.email,
         entityType: "FORM_TAB",
-        entityId: agg.form.id,
+        entityId: form.id,
         afterState: { newTabOrder: input.tabIds },
         metadata: {
           entityType: "TAB",
-          parentId: agg.form.id,
+          parentId: form.id,
           affectedIds: input.tabIds,
           expectedRevision: input.expectedRevision,
           newSolutionRevision: updatedSolution.revision,
@@ -372,7 +757,7 @@ export class FormService {
   async createSection(
     solutionId: string,
     tabId: string,
-    input: { expectedRevision: number; key?: string; title: string },
+    input: { formId?: string; expectedRevision: number; key?: string; title: string },
     context: SessionContext
   ): Promise<{ section: FormSectionRow; solutionRevision: number }> {
     if (typeof input.expectedRevision !== "number" || !Number.isInteger(input.expectedRevision)) {
@@ -383,10 +768,9 @@ export class FormService {
     }
 
     const orgId = context.activeOrganisation.id;
-    const agg = await formRepository.getFormAggregate(solutionId, orgId);
-    if (!agg) throw new NotFoundError("Solution or Form not found");
+    const form = await this.resolveForm(solutionId, orgId, input.formId);
 
-    const tab = await formRepository.findTabById(tabId, agg.form.id);
+    const tab = await formRepository.findTabById(tabId, form.id);
     if (!tab) throw new NotFoundError("Tab not found");
 
     const key = input.key ? validateSymbolicKey(input.key, "Section key") : `sec_${Math.random().toString(36).substring(7)}`;
@@ -403,7 +787,7 @@ export class FormService {
 
         const maxOrder = await formRepository.getMaxSectionDisplayOrderInTx(tx, tabId);
         const section = await formRepository.createSectionInTx(tx, {
-          formId: agg.form.id,
+          formId: form.id,
           tabId,
           key,
           title: input.title.trim(),
@@ -438,7 +822,7 @@ export class FormService {
   async updateSection(
     solutionId: string,
     sectionId: string,
-    input: { expectedRevision: number; title: string },
+    input: { formId?: string; expectedRevision: number; title: string },
     context: SessionContext
   ): Promise<{ section: FormSectionRow; solutionRevision: number }> {
     if (typeof input.expectedRevision !== "number" || !Number.isInteger(input.expectedRevision)) {
@@ -449,10 +833,9 @@ export class FormService {
     }
 
     const orgId = context.activeOrganisation.id;
-    const agg = await formRepository.getFormAggregate(solutionId, orgId);
-    if (!agg) throw new NotFoundError("Solution or Form not found");
+    const form = await this.resolveForm(solutionId, orgId, input.formId);
 
-    const currentSection = await formRepository.findSectionById(sectionId, agg.form.id);
+    const currentSection = await formRepository.findSectionById(sectionId, form.id);
     if (!currentSection) throw new NotFoundError("Section not found");
 
     const db = getDb();
@@ -464,7 +847,7 @@ export class FormService {
         throw new ConflictError("Stale update rejected: Solution revision conflict.", { expectedRevision: input.expectedRevision });
       }
 
-      const section = await formRepository.updateSectionInTx(tx, sectionId, agg.form.id, input.title.trim());
+      const section = await formRepository.updateSectionInTx(tx, sectionId, form.id, input.title.trim());
       if (!section) throw new NotFoundError("Section not found");
 
       await tx.insert(auditEvents).values({
@@ -488,7 +871,7 @@ export class FormService {
   async deleteSection(
     solutionId: string,
     sectionId: string,
-    input: { expectedRevision: number },
+    input: { formId?: string; expectedRevision: number },
     context: SessionContext
   ): Promise<{ success: boolean; solutionRevision: number }> {
     if (typeof input.expectedRevision !== "number" || !Number.isInteger(input.expectedRevision)) {
@@ -496,10 +879,9 @@ export class FormService {
     }
 
     const orgId = context.activeOrganisation.id;
-    const agg = await formRepository.getFormAggregate(solutionId, orgId);
-    if (!agg) throw new NotFoundError("Solution or Form not found");
+    const form = await this.resolveForm(solutionId, orgId, input.formId);
 
-    const section = await formRepository.findSectionById(sectionId, agg.form.id);
+    const section = await formRepository.findSectionById(sectionId, form.id);
     if (!section) throw new NotFoundError("Section not found");
 
     const fieldCount = await formRepository.countFieldsInSection(sectionId);
@@ -516,7 +898,7 @@ export class FormService {
         throw new ConflictError("Stale update rejected: Solution revision conflict.", { expectedRevision: input.expectedRevision });
       }
 
-      await formRepository.deleteSectionInTx(tx, sectionId, agg.form.id);
+      await formRepository.deleteSectionInTx(tx, sectionId, form.id);
 
       await tx.insert(auditEvents).values({
         organisationId: orgId,
@@ -537,7 +919,7 @@ export class FormService {
 
   async reorderSections(
     solutionId: string,
-    input: { expectedRevision: number; tabId: string; sectionIds: string[] },
+    input: { formId?: string; expectedRevision: number; tabId: string; sectionIds: string[] },
     context: SessionContext
   ): Promise<{ sections: FormSectionRow[]; solutionRevision: number }> {
     if (typeof input.expectedRevision !== "number" || !Number.isInteger(input.expectedRevision)) {
@@ -547,13 +929,12 @@ export class FormService {
     if (!Array.isArray(input.sectionIds)) throw new ValidationError("sectionIds must be an array.");
 
     const orgId = context.activeOrganisation.id;
-    const agg = await formRepository.getFormAggregate(solutionId, orgId);
-    if (!agg) throw new NotFoundError("Solution or Form not found");
+    const form = await this.resolveForm(solutionId, orgId, input.formId);
 
-    const tab = await formRepository.findTabById(input.tabId, agg.form.id);
+    const tab = await formRepository.findTabById(input.tabId, form.id);
     if (!tab) throw new NotFoundError("Tab not found");
 
-    const existingSections = agg.sections.filter((s) => s.tabId === input.tabId);
+    const existingSections = await formRepository.listSectionsInTab(input.tabId);
     const existingIdsSet = new Set(existingSections.map((s) => s.id));
 
     if (input.sectionIds.length !== existingSections.length || new Set(input.sectionIds).size !== existingSections.length) {
@@ -602,7 +983,7 @@ export class FormService {
   async moveSection(
     solutionId: string,
     sectionId: string,
-    input: { expectedRevision: number; targetTabId: string },
+    input: { formId?: string; expectedRevision: number; targetTabId: string },
     context: SessionContext
   ): Promise<{ section: FormSectionRow; solutionRevision: number }> {
     if (typeof input.expectedRevision !== "number" || !Number.isInteger(input.expectedRevision)) {
@@ -611,13 +992,12 @@ export class FormService {
     if (!input.targetTabId) throw new ValidationError("targetTabId is required.");
 
     const orgId = context.activeOrganisation.id;
-    const agg = await formRepository.getFormAggregate(solutionId, orgId);
-    if (!agg) throw new NotFoundError("Solution or Form not found");
+    const form = await this.resolveForm(solutionId, orgId, input.formId);
 
-    const section = await formRepository.findSectionById(sectionId, agg.form.id);
+    const section = await formRepository.findSectionById(sectionId, form.id);
     if (!section) throw new NotFoundError("Section not found");
 
-    const targetTab = await formRepository.findTabById(input.targetTabId, agg.form.id);
+    const targetTab = await formRepository.findTabById(input.targetTabId, form.id);
     if (!targetTab) throw new NotFoundError("Target Tab not found");
 
     if (section.tabId === input.targetTabId) {
@@ -665,6 +1045,7 @@ export class FormService {
     solutionId: string,
     sectionId: string,
     input: {
+      formId?: string;
       expectedRevision: number;
       propertyId: string;
       controlType: string;
@@ -684,10 +1065,9 @@ export class FormService {
     validateStaticFieldStates(input);
 
     const orgId = context.activeOrganisation.id;
-    const agg = await formRepository.getFormAggregate(solutionId, orgId);
-    if (!agg) throw new NotFoundError("Solution or Form not found");
+    const form = await this.resolveForm(solutionId, orgId, input.formId);
 
-    const section = await formRepository.findSectionById(sectionId, agg.form.id);
+    const section = await formRepository.findSectionById(sectionId, form.id);
     if (!section) throw new NotFoundError("Section not found");
 
     const property = await solutionPropertyRepository.findById(input.propertyId, solutionId, orgId);
@@ -708,7 +1088,7 @@ export class FormService {
         const maxOrder = await formRepository.getMaxFieldDisplayOrderInTx(tx, sectionId);
         const fieldRef = await formRepository.createFieldRefInTx(tx, {
           solutionId,
-          formId: agg.form.id,
+          formId: form.id,
           sectionId,
           propertyId: input.propertyId,
           controlType: input.controlType.trim().toUpperCase(),
@@ -754,6 +1134,7 @@ export class FormService {
     solutionId: string,
     fieldRefId: string,
     input: {
+      formId?: string;
       expectedRevision: number;
       controlType?: string;
       isVisible?: boolean;
@@ -768,10 +1149,9 @@ export class FormService {
     }
 
     const orgId = context.activeOrganisation.id;
-    const agg = await formRepository.getFormAggregate(solutionId, orgId);
-    if (!agg) throw new NotFoundError("Solution or Form not found");
+    const form = await this.resolveForm(solutionId, orgId, input.formId);
 
-    const currentField = await formRepository.findFieldRefById(fieldRefId, agg.form.id);
+    const currentField = await formRepository.findFieldRefById(fieldRefId, form.id);
     if (!currentField) throw new NotFoundError("Field reference not found");
 
     const mergedStates = {
@@ -798,7 +1178,7 @@ export class FormService {
         throw new ConflictError("Stale update rejected: Solution revision conflict.", { expectedRevision: input.expectedRevision });
       }
 
-      const updated = await formRepository.updateFieldRefInTx(tx, fieldRefId, agg.form.id, {
+      const updated = await formRepository.updateFieldRefInTx(tx, fieldRefId, form.id, {
         controlType: input.controlType ? input.controlType.trim().toUpperCase() : undefined,
         isVisible: input.isVisible,
         isEnabled: input.isEnabled,
@@ -841,7 +1221,7 @@ export class FormService {
   async removeFieldReference(
     solutionId: string,
     fieldRefId: string,
-    input: { expectedRevision: number },
+    input: { formId?: string; expectedRevision: number },
     context: SessionContext
   ): Promise<{ success: boolean; solutionRevision: number }> {
     if (typeof input.expectedRevision !== "number" || !Number.isInteger(input.expectedRevision)) {
@@ -849,10 +1229,9 @@ export class FormService {
     }
 
     const orgId = context.activeOrganisation.id;
-    const agg = await formRepository.getFormAggregate(solutionId, orgId);
-    if (!agg) throw new NotFoundError("Solution or Form not found");
+    const form = await this.resolveForm(solutionId, orgId, input.formId);
 
-    const fieldRef = await formRepository.findFieldRefById(fieldRefId, agg.form.id);
+    const fieldRef = await formRepository.findFieldRefById(fieldRefId, form.id);
     if (!fieldRef) throw new NotFoundError("Field reference not found");
 
     const db = getDb();
@@ -864,7 +1243,7 @@ export class FormService {
         throw new ConflictError("Stale update rejected: Solution revision conflict.", { expectedRevision: input.expectedRevision });
       }
 
-      await formRepository.deleteFieldRefInTx(tx, fieldRefId, agg.form.id);
+      await formRepository.deleteFieldRefInTx(tx, fieldRefId, form.id);
 
       // Compact remaining fields in section
       const remaining = await formRepository.listFieldsInSection(fieldRef.sectionId, tx);
@@ -889,7 +1268,7 @@ export class FormService {
 
   async reorderFields(
     solutionId: string,
-    input: { expectedRevision: number; sectionId: string; fieldReferenceIds: string[] },
+    input: { formId?: string; expectedRevision: number; sectionId: string; fieldReferenceIds: string[] },
     context: SessionContext
   ): Promise<{ fieldReferences: FormFieldRefRow[]; solutionRevision: number }> {
     if (typeof input.expectedRevision !== "number" || !Number.isInteger(input.expectedRevision)) {
@@ -899,13 +1278,12 @@ export class FormService {
     if (!Array.isArray(input.fieldReferenceIds)) throw new ValidationError("fieldReferenceIds must be an array.");
 
     const orgId = context.activeOrganisation.id;
-    const agg = await formRepository.getFormAggregate(solutionId, orgId);
-    if (!agg) throw new NotFoundError("Solution or Form not found");
+    const form = await this.resolveForm(solutionId, orgId, input.formId);
 
-    const section = await formRepository.findSectionById(input.sectionId, agg.form.id);
+    const section = await formRepository.findSectionById(input.sectionId, form.id);
     if (!section) throw new NotFoundError("Section not found");
 
-    const existingFields = agg.fields.filter((f) => f.sectionId === input.sectionId);
+    const existingFields = await formRepository.listFieldsInSection(input.sectionId);
     const existingIdsSet = new Set(existingFields.map((f) => f.id));
 
     if (input.fieldReferenceIds.length !== existingFields.length || new Set(input.fieldReferenceIds).size !== existingFields.length) {
@@ -954,7 +1332,7 @@ export class FormService {
   async moveFieldReference(
     solutionId: string,
     fieldRefId: string,
-    input: { expectedRevision: number; targetSectionId: string },
+    input: { formId?: string; expectedRevision: number; targetSectionId: string },
     context: SessionContext
   ): Promise<{ fieldReference: FormFieldRefRow; solutionRevision: number }> {
     if (typeof input.expectedRevision !== "number" || !Number.isInteger(input.expectedRevision)) {
@@ -963,13 +1341,12 @@ export class FormService {
     if (!input.targetSectionId) throw new ValidationError("targetSectionId is required.");
 
     const orgId = context.activeOrganisation.id;
-    const agg = await formRepository.getFormAggregate(solutionId, orgId);
-    if (!agg) throw new NotFoundError("Solution or Form not found");
+    const form = await this.resolveForm(solutionId, orgId, input.formId);
 
-    const fieldRef = await formRepository.findFieldRefById(fieldRefId, agg.form.id);
+    const fieldRef = await formRepository.findFieldRefById(fieldRefId, form.id);
     if (!fieldRef) throw new NotFoundError("Field reference not found");
 
-    const targetSection = await formRepository.findSectionById(input.targetSectionId, agg.form.id);
+    const targetSection = await formRepository.findSectionById(input.targetSectionId, form.id);
     if (!targetSection) throw new NotFoundError("Target section not found");
 
     if (fieldRef.sectionId === input.targetSectionId) {
